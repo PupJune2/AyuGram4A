@@ -202,7 +202,8 @@ android {
             ext.abiVersionCode = 9
         }
         beta {
-            ndk.abiFilters "armeabi-v7a", "arm64-v8a"
+            // CI test builds pass -PbetaAbis=arm64-v8a to compile one ABI only
+            ndk.abiFilters(*(project.findProperty("betaAbis")?.toString()?.split(",") ?: ["armeabi-v7a", "arm64-v8a"]))
             sourceSets.debug.manifest.srcFile 'config/debug/AndroidManifest.xml'
             ext.abiVersionCode = 9
         }

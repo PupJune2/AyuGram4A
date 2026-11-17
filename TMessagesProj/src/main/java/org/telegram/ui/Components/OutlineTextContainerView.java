@@ -15,6 +15,8 @@ import androidx.core.graphics.ColorUtils;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
 
@@ -41,6 +43,7 @@ public class OutlineTextContainerView extends FrameLayout {
     private RectF rect = new RectF();
     private String mText = "";
     private Paint outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Paint auroraFillPaint;
     private TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
 
     private SpringAnimation selectionSpring = new SpringAnimation(this, SELECTION_PROGRESS_PROPERTY);
@@ -141,6 +144,10 @@ public class OutlineTextContainerView extends FrameLayout {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        if (AuroraTheme.isActive()) {
+            drawAurora(canvas);
+            return;
+        }
 
         float textOffset = textPaint.getTextSize() / 2f - AndroidUtilities.dp(1.75f);
         float topY = getPaddingTop() + textOffset;
@@ -172,6 +179,47 @@ public class OutlineTextContainerView extends FrameLayout {
         canvas.save();
         canvas.scale(scaleX, scaleX, getPaddingLeft() + AndroidUtilities.dp(PADDING_LEFT + PADDING_TEXT), textY);
         canvas.drawText(mText, getPaddingLeft() + AndroidUtilities.dp(PADDING_LEFT), textY, textPaint);
+        canvas.restore();
+    }
+
+    /**
+     * Aurora Motion: a softly filled pill. The floating label sits where the
+     * top edge turns straight, in a gap that opens from its middle.
+     */
+    private void drawAurora(Canvas canvas) {
+        if (auroraFillPaint == null) {
+            auroraFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            auroraFillPaint.setColor(0x14ffffff);
+        }
+        float stroke = outlinePaint.getStrokeWidth();
+        rect.set(getPaddingLeft() + stroke, getPaddingTop() + stroke, getWidth() - stroke - getPaddingRight(), getHeight() - stroke - getPaddingBottom());
+        float radius = Math.min(rect.height() / 2f, AndroidUtilities.dp(29));
+        canvas.drawRoundRect(rect, radius, radius, auroraFillPaint);
+
+        float textOffset = textPaint.getTextSize() / 2f - AndroidUtilities.dp(1.75f);
+        float topY = getPaddingTop() + textOffset;
+        float centerY = getHeight() / 2f + textPaint.getTextSize() / 2f;
+        boolean useCenter = attachedEditText != null && attachedEditText.length() == 0 && TextUtils.isEmpty(attachedEditText.getHint()) || forceUseCenter;
+        float lift = useCenter ? selectionProgress : 1f;
+        float textY = topY + (centerY - topY) * (1f - lift);
+        float scaleX = 0.75f + 0.25f * (1f - lift);
+        float insideX = getPaddingLeft() + AndroidUtilities.dp(PADDING_LEFT);
+        float edgeX = getPaddingLeft() + radius + AndroidUtilities.dp(2);
+        float textX = insideX + (edgeX - insideX) * lift;
+        float textWidth = textPaint.measureText(mText) * scaleX;
+
+        canvas.save();
+        if (textWidth > 0 && lift > 0) {
+            float half = (textWidth / 2f + AndroidUtilities.dp(PADDING_TEXT)) * lift;
+            float middle = textX + textWidth / 2f;
+            canvas.clipRect(middle - half, getPaddingTop() - stroke, middle + half, getPaddingTop() + stroke * 3, Region.Op.DIFFERENCE);
+        }
+        canvas.drawRoundRect(rect, radius, radius, outlinePaint);
+        canvas.restore();
+
+        canvas.save();
+        canvas.scale(scaleX, scaleX, textX, textY);
+        canvas.drawText(mText, textX, textY, textPaint);
         canvas.restore();
     }
 }

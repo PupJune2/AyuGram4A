@@ -4749,6 +4749,14 @@ public class Theme {
             FileLog.e(e);
             throw new RuntimeException(e);
         }
+        if (applyingTheme == null && AuroraTheme.isFreshInstall(preferences)) {
+            // New installs start in Aurora Motion so the sign-in screen matches it.
+            // Saved right away, so the choice sticks once an account is added.
+            applyingTheme = themesDict.get(AuroraTheme.THEME_NAME);
+            if (applyingTheme != null) {
+                preferences.edit().putString("theme", applyingTheme.getKey()).apply();
+            }
+        }
         if (applyingTheme == null) {
             applyingTheme = defaultTheme;
         } else {

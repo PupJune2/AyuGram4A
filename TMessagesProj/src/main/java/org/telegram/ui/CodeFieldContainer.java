@@ -15,6 +15,8 @@ import android.widget.LinearLayout;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
@@ -25,6 +27,7 @@ public class CodeFieldContainer extends LinearLayout {
 
     Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Paint auroraFillPaint;
     float strokeWidth;
     public boolean ignoreOnTextChange;
     public boolean isFocusSuppressed;
@@ -67,7 +70,18 @@ public class CodeFieldContainer extends LinearLayout {
                     AndroidUtilities.rectTmp.inset(offset, offset);
                 }
 
-                canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(4), AndroidUtilities.dp(4), paint);
+                if (AuroraTheme.isActive()) {
+                    // Aurora Motion: softly filled, well-rounded boxes.
+                    if (auroraFillPaint == null) {
+                        auroraFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                        auroraFillPaint.setColor(0x14ffffff);
+                    }
+                    float radius = Math.min(AndroidUtilities.rectTmp.width(), AndroidUtilities.rectTmp.height()) * 0.32f;
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFillPaint);
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, paint);
+                } else {
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(4), AndroidUtilities.dp(4), paint);
+                }
             }
         }
         super.dispatchDraw(canvas);

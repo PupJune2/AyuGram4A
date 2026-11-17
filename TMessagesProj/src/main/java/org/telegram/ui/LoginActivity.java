@@ -94,6 +94,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
+import com.radolyn.ayugram.ui.aurora.AuroraHeadlineTextView;
+import com.radolyn.ayugram.ui.aurora.AuroraLoginBackground;
+import com.radolyn.ayugram.ui.aurora.AuroraLoginButton;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
@@ -292,6 +296,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     private AnimatorSet doneItemAnimation;
     private TransformableLoginButtonView floatingButtonIcon;
     private FrameLayout floatingButtonContainer;
+    private AuroraLoginBackground auroraBackground;
+    private AuroraLoginButton auroraLoginButton;
     private VerticalPositionAutoAnimator floatingAutoAnimator;
     private RadialProgressView floatingProgressView;
     private int progressRequestId;
@@ -540,6 +546,11 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         });
         fragmentView = sizeNotifierFrameLayout;
 
+        if (AuroraTheme.isActive()) {
+            auroraBackground = new AuroraLoginBackground(context);
+            sizeNotifierFrameLayout.addView(auroraBackground, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
+
         ScrollView scrollView = new ScrollView(context) {
             @Override
             public boolean requestChildRectangleOnScreen(View child, Rect rectangle, boolean immediate) {
@@ -660,8 +671,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 }
             }
         });
+        if (AuroraTheme.isActive()) {
+            // Aurora Motion: a light full-width "Continue" pill instead of the round button.
+            auroraLoginButton = new AuroraLoginButton(context, floatingButtonContainer, LocaleController.getString("Continue", R.string.Continue));
+            floatingButtonContainer.setOutlineProvider(null);
+        }
         floatingAutoAnimator = VerticalPositionAutoAnimator.attach(floatingButtonContainer);
-        sizeNotifierFrameLayout.addView(floatingButtonContainer, LayoutHelper.createFrame(56, 56, Gravity.RIGHT | Gravity.BOTTOM, 0, 0, 24, 16));
+        if (auroraLoginButton != null) {
+            sizeNotifierFrameLayout.addView(floatingButtonContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, AuroraLoginButton.HEIGHT_DP, Gravity.BOTTOM, 24, 0, 24, 16));
+        } else {
+            sizeNotifierFrameLayout.addView(floatingButtonContainer, LayoutHelper.createFrame(56, 56, Gravity.RIGHT | Gravity.BOTTOM, 0, 0, 24, 16));
+        }
         floatingButtonContainer.setOnClickListener(view -> onDoneButtonPressed());
         floatingAutoAnimator.addUpdateListener((animation, value, velocity) -> {
             if (phoneNumberConfirmView != null) {
@@ -701,7 +721,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         floatingButtonIcon.setProgress(1f);
         floatingButtonIcon.setDrawBackground(false);
         floatingButtonContainer.setContentDescription(LocaleController.getString("Done", R.string.Done));
-        floatingButtonContainer.addView(floatingButtonIcon, LayoutHelper.createFrame(56, 56));
+        if (auroraLoginButton != null) {
+            // The pill draws its own label; the arrow stays detached but keeps its size for the code that reads it.
+            floatingButtonIcon.setLayoutParams(LayoutHelper.createFrame(56, 56));
+        } else {
+            floatingButtonContainer.addView(floatingButtonIcon, LayoutHelper.createFrame(56, 56));
+        }
 
         floatingProgressView = new RadialProgressView(context);
         floatingProgressView.setSize(AndroidUtilities.dp(22));
@@ -729,6 +754,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 backButtonView.setVisibility(v.needBackButton() || newAccount || activityMode == MODE_CHANGE_PHONE_NUMBER ? View.VISIBLE : View.GONE);
                 v.setVisibility(View.VISIBLE);
                 v.onShow();
+                onAuroraPageShown(a, false);
 
                 setCustomKeyboardVisible(v.hasCustomKeyboard(), false);
 
@@ -1219,6 +1245,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         if (!show) {
                             if (floating) {
                                 floatingButtonContainer.setVisibility(View.GONE);
+                                if (auroraLoginButton != null) {
+                                    auroraLoginButton.setLoading(false, false);
+                                }
                             }
 
                             if (floating && floatingButtonIcon.getAlpha() != 1f) {
@@ -1337,6 +1366,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
         if (doneItemAnimation != null) {
             doneItemAnimation.cancel();
+        }
+        if (floating && auroraLoginButton != null) {
+            auroraLoginButton.setLoading(show, animated);
         }
 
         if (animated) {
@@ -1540,6 +1572,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             pagesAnimation.start();
 
             setCustomKeyboardVisible(newView.hasCustomKeyboard(), true);
+            onAuroraPageShown(page, true);
         } else {
             backButtonView.setVisibility(views[page].needBackButton() || newAccount ? View.VISIBLE : View.GONE);
             views[currentViewNum].setVisibility(View.GONE);
@@ -1551,7 +1584,40 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             views[page].onShow();
 
             setCustomKeyboardVisible(views[page].hasCustomKeyboard(), false);
+            onAuroraPageShown(page, false);
         }
+    }
+
+    /**
+     * Aurora Motion: moves the background lights and step dots to the page's
+     * step and replays the headline's word-by-word entrance.
+     */
+    private void onAuroraPageShown(int page, boolean animated) {
+        if (auroraBackground == null) {
+            return;
+        }
+        int step;
+        switch (page) {
+            case VIEW_PHONE_INPUT:
+                step = AuroraLoginBackground.STEP_PHONE;
+                break;
+            case VIEW_CODE_MESSAGE:
+            case VIEW_CODE_SMS:
+            case VIEW_CODE_FLASH_CALL:
+            case VIEW_CODE_CALL:
+            case VIEW_CODE_MISSED_CALL:
+            case VIEW_CODE_FRAGMENT_SMS:
+            case VIEW_ADD_EMAIL:
+            case VIEW_CODE_EMAIL_SETUP:
+            case VIEW_CODE_EMAIL:
+                step = AuroraLoginBackground.STEP_CODE;
+                break;
+            default:
+                step = AuroraLoginBackground.STEP_PASSWORD;
+                break;
+        }
+        auroraBackground.setStep(step, animated);
+        AuroraHeadlineTextView.revealIn(views[page]);
     }
 
     @Override
@@ -1791,7 +1857,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             setOrientation(VERTICAL);
             setGravity(Gravity.CENTER);
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(activityMode == MODE_CHANGE_PHONE_NUMBER ? R.string.ChangePhoneNewNumber : R.string.YourNumber));
@@ -3285,7 +3351,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             confirmTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             confirmTextView.setLineSpacing(AndroidUtilities.dp(2), 1.0f);
 
-            titleTextView = new TextView(context);
+            titleTextView = new AuroraHeadlineTextView(context);
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
@@ -4769,7 +4835,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             lockFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(lockFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(R.string.YourPasswordHeader));
@@ -5119,7 +5185,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             waitFrameLayout.setVisibility(AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet() ? GONE : VISIBLE);
             innerLinearLayout.addView(waitFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(R.string.ResetAccount));
@@ -5328,7 +5394,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             inboxFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(inboxFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(activityMode == MODE_CHANGE_LOGIN_EMAIL ? R.string.EnterNewEmail : R.string.AddEmailTitle));
@@ -5687,7 +5753,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             inboxFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(inboxFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(activityMode == MODE_CHANGE_LOGIN_EMAIL ? R.string.CheckYourNewEmail : setup ? R.string.VerificationCode : R.string.CheckYourEmail));
@@ -6481,7 +6547,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             inboxFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(inboxFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(R.string.EnterCode));
@@ -6772,7 +6838,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             codeField = new EditTextBoldCursor[stage == 1 ? 1 : 2];
             outlineFields = new OutlineTextContainerView[codeField.length];
 
-            titleTextView = new TextView(context);
+            titleTextView = new AuroraHeadlineTextView(context);
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleTextView.setLineSpacing(AndroidUtilities.dp(2), 1.0f);
@@ -7343,7 +7409,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             showAvatarProgress(false, false);
 
-            titleTextView = new TextView(context);
+            titleTextView = new AuroraHeadlineTextView(context);
             titleTextView.setText(LocaleController.getString(R.string.RegistrationProfileInfo));
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
@@ -7793,13 +7859,22 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     toY = getParentLayout().getView().getHeight() - floatingButtonIcon.getLayoutParams().height - ((ViewGroup.MarginLayoutParams)floatingButtonContainer.getLayoutParams()).bottomMargin -
                             (isCustomKeyboardVisible() ? AndroidUtilities.dp(CustomPhoneKeyboardView.KEYBOARD_HEIGHT_DP) : 0) - getParentLayout().getView().getPaddingTop() - getParentLayout().getView().getPaddingBottom();
 
+            // Aurora Motion: no morph into a round button; the pill fades in with the screen.
+            boolean auroraPill = auroraLoginButton != null;
             ValueAnimator animator = ValueAnimator.ofFloat(0, 1);
             animator.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationStart(Animator animation) {
-                    floatingButtonContainer.setVisibility(View.INVISIBLE);
                     keyboardLinearLayout.setAlpha(0);
                     fragmentView.setBackgroundColor(Color.TRANSPARENT);
+                    if (auroraPill) {
+                        floatingButtonContainer.setAlpha(0f);
+                        if (auroraBackground != null) {
+                            auroraBackground.setAlpha(0f);
+                        }
+                        return;
+                    }
+                    floatingButtonContainer.setVisibility(View.INVISIBLE);
                     startMessagingButton.setVisibility(View.INVISIBLE);
 
                     FrameLayout frameLayout = (FrameLayout) fragmentView;
@@ -7812,6 +7887,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     startMessagingButton.setVisibility(View.VISIBLE);
                     fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
                     floatingButtonContainer.setVisibility(View.VISIBLE);
+                    floatingButtonContainer.setAlpha(1f);
+                    if (auroraBackground != null) {
+                        auroraBackground.setAlpha(1f);
+                    }
 
                     FrameLayout frameLayout = (FrameLayout) fragmentView;
                     frameLayout.removeView(transformButton);
@@ -7844,6 +7923,14 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 introView.setScaleX(sc);
                 introView.setScaleY(sc);
 
+                if (auroraPill) {
+                    floatingButtonContainer.setAlpha(val);
+                    if (auroraBackground != null) {
+                        auroraBackground.setAlpha(val);
+                    }
+                    return;
+                }
+
                 transformParams.width = (int) (oldTransformWidth + (newTransformSize - oldTransformWidth) * val);
                 transformParams.height = (int) (oldTransformHeight + (newTransformSize - oldTransformHeight) * val);
                 transformButton.requestLayout();
@@ -7867,7 +7954,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
 
         Context context = getParentActivity();
-        Drawable drawable = CanvasUtils.createFabBackground();
+        Drawable drawable = auroraLoginButton != null ? auroraLoginButton.getBackground() : CanvasUtils.createFabBackground();
         floatingButtonContainer.setBackground(drawable);
 
         backButtonView.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -7882,7 +7969,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         floatingButtonIcon.setColor(Theme.getColor(Theme.key_chats_actionIcon));
         floatingButtonIcon.setBackgroundColor(Theme.getColor(Theme.key_chats_actionBackground));
 
-        floatingProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon));
+        floatingProgressView.setProgressColor(auroraLoginButton != null ? AuroraLoginButton.INK : Theme.getColor(Theme.key_chats_actionIcon));
 
         for (SlideView slideView : views) {
             slideView.updateColors();
@@ -8053,8 +8140,14 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             int fragmentX = loc[0], fragmentY = loc[1];
 
             fabContainer.getLocationInWindow(loc);
-            popupFabContainer.setTranslationX(loc[0] - fragmentX);
-            popupFabContainer.setTranslationY(loc[1] - fragmentY);
+            float offsetX = 0, offsetY = 0;
+            if (AuroraTheme.isActive()) {
+                // Aurora Motion: the pill "narrows" into the round confirm button at its centre.
+                offsetX = (fabContainer.getWidth() - AndroidUtilities.dp(56)) / 2f;
+                offsetY = (fabContainer.getHeight() - AndroidUtilities.dp(56)) / 2f;
+            }
+            popupFabContainer.setTranslationX(loc[0] - fragmentX + offsetX);
+            popupFabContainer.setTranslationY(loc[1] - fragmentY + offsetY);
             requestLayout();
         }
 
@@ -8068,6 +8161,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             confirmTextView.setTextColor(Theme.getColor(Theme.key_changephoneinfo_image2));
             popupFabContainer.setBackground(CanvasUtils.createFabBackground());
             floatingProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon));
+            if (AuroraTheme.isActive()) {
+                fabTransform.setColor(AuroraLoginButton.INK);
+                fabTransform.setBackgroundColor(AuroraLoginButton.FILL);
+                popupFabContainer.setBackground(Theme.createCircleDrawable(AndroidUtilities.dp(56), AuroraLoginButton.FILL));
+                floatingProgressView.setProgressColor(AuroraLoginButton.INK);
+            }
         }
 
         @Override

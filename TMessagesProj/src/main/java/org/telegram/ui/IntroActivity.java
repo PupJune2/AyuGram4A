@@ -45,6 +45,9 @@ import androidx.core.graphics.ColorUtils;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
+import com.radolyn.ayugram.ui.aurora.AuroraLoginButton;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
@@ -947,8 +950,16 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
     private void updateColors(boolean fromTheme) {
         fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         switchLanguageTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
-        startMessagingButton.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
-        startMessagingButton.setBackground(Theme.createSimpleSelectorRoundRectDrawable(AndroidUtilities.dp(6), Theme.getColor(Theme.key_changephoneinfo_image2), Theme.getColor(Theme.key_chats_actionPressedBackground)));
+        if (AuroraTheme.isActive()) {
+            // Aurora Motion: the same light pill as the sign-in screen's Continue button.
+            startMessagingButton.setTextColor(AuroraLoginButton.INK);
+            startMessagingButton.setBackground(Theme.createSimpleSelectorRoundRectDrawable(AndroidUtilities.dp(25), AuroraLoginButton.FILL, 0xffdcd1ff));
+            startMessagingButton.setStateListAnimator(AuroraTheme.createPressAnimator(startMessagingButton, 0.96f));
+        } else {
+            startMessagingButton.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText));
+            startMessagingButton.setBackground(Theme.createSimpleSelectorRoundRectDrawable(AndroidUtilities.dp(6), Theme.getColor(Theme.key_changephoneinfo_image2), Theme.getColor(Theme.key_chats_actionPressedBackground)));
+            startMessagingButton.setStateListAnimator(null);
+        }
         darkThemeDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_changephoneinfo_image2), PorterDuff.Mode.SRC_IN));
         bottomPages.invalidate();
         if (fromTheme) {

@@ -1,6 +1,11 @@
 package com.radolyn.ayugram.ui.aurora;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.animation.StateListAnimator;
 import android.animation.ValueAnimator;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -13,10 +18,13 @@ import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.LayoutAnimationController;
+import android.view.animation.OvershootInterpolator;
 import android.view.animation.TranslateAnimation;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.LiteMode;
+import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 
@@ -45,6 +53,29 @@ public final class AuroraTheme {
     public static boolean isActive() {
         Theme.ThemeInfo themeInfo = Theme.getActiveTheme();
         return themeInfo != null && themeInfo.info == null && THEME_NAME.equals(themeInfo.name);
+    }
+
+    /**
+     * True when no theme was ever saved and no account is signed in, so this is
+     * a new install (or every account logged out before a theme was picked).
+     * Reads the stored login directly, because accounts may not be loaded yet
+     * while themes initialise.
+     */
+    public static boolean isFreshInstall(SharedPreferences mainSettings) {
+        if (mainSettings.contains("theme") || mainSettings.contains("nighttheme")) {
+            return false;
+        }
+        Context context = ApplicationLoader.applicationContext;
+        if (context == null) {
+            return false;
+        }
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            SharedPreferences account = context.getSharedPreferences(a == 0 ? "userconfing" : "userconfig" + a, Context.MODE_PRIVATE);
+            if (account.contains("user")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -101,6 +132,25 @@ public final class AuroraTheme {
                 list.scheduleLayoutAnimation();
             }
         });
+    }
+
+    /**
+     * The design's springy press: shrinks to {@code pressedScale} quickly and
+     * springs back with a little overshoot on release.
+     */
+    public static StateListAnimator createPressAnimator(View view, float pressedScale) {
+        StateListAnimator animator = new StateListAnimator();
+        AnimatorSet press = new AnimatorSet();
+        press.playTogether(ObjectAnimator.ofFloat(view, View.SCALE_X, pressedScale), ObjectAnimator.ofFloat(view, View.SCALE_Y, pressedScale));
+        press.setDuration(150);
+        press.setInterpolator(CubicBezierInterpolator.EASE_OUT);
+        AnimatorSet release = new AnimatorSet();
+        release.playTogether(ObjectAnimator.ofFloat(view, View.SCALE_X, 1f), ObjectAnimator.ofFloat(view, View.SCALE_Y, 1f));
+        release.setDuration(350);
+        release.setInterpolator(new OvershootInterpolator(2f));
+        animator.addState(new int[]{android.R.attr.state_pressed}, press);
+        animator.addState(new int[]{}, release);
+        return animator;
     }
 
     /**

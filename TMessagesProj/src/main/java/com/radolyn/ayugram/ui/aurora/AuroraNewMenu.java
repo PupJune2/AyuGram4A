@@ -4,7 +4,6 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
-import android.animation.StateListAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.PorterDuff;
@@ -111,23 +110,8 @@ public class AuroraNewMenu extends FrameLayout {
         pill.addView(text, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 12, 0, 0, 0));
 
         pill.setOnClickListener(v -> action.run());
-        pill.setStateListAnimator(createPressAnimator(pill));
+        pill.setStateListAnimator(AuroraTheme.createPressAnimator(pill, 0.94f));
         return pill;
-    }
-
-    static StateListAnimator createPressAnimator(View view) {
-        StateListAnimator animator = new StateListAnimator();
-        AnimatorSet press = new AnimatorSet();
-        press.playTogether(ObjectAnimator.ofFloat(view, View.SCALE_X, 0.94f), ObjectAnimator.ofFloat(view, View.SCALE_Y, 0.94f));
-        press.setDuration(150);
-        press.setInterpolator(CubicBezierInterpolator.EASE_OUT);
-        AnimatorSet release = new AnimatorSet();
-        release.playTogether(ObjectAnimator.ofFloat(view, View.SCALE_X, 1f), ObjectAnimator.ofFloat(view, View.SCALE_Y, 1f));
-        release.setDuration(350);
-        release.setInterpolator(new OvershootInterpolator(2f));
-        animator.addState(new int[]{android.R.attr.state_pressed}, press);
-        animator.addState(new int[]{}, release);
-        return animator;
     }
 
     public boolean isMenuShown() {

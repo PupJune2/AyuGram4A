@@ -7,8 +7,10 @@ import android.graphics.RectF;
 import android.text.Layout;
 import android.text.SpannableString;
 import android.text.Spanned;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,14 +24,15 @@ import java.util.ArrayList;
 
 /**
  * A screen headline. With another theme it is a plain TextView. Under Aurora
- * Motion it is set larger, its last word is lavender, and {@link #reveal()}
- * slides the words up into place one after another, as in the design's
- * sign-in screens (0.7s each, 90ms apart).
+ * Motion its last word is lavender, it shrinks rather than break a word that
+ * is too long for a line, and {@link #reveal(View)} slides the words up into
+ * place one after another, as in the design's sign-in screens (0.7s each,
+ * 90ms apart).
  */
 public class AuroraHeadlineTextView extends TextView {
 
-    private static final int ACCENT = 0xffdcd1ff;
-    private static final float AURORA_SCALE = 26f / 18f;
+    public static final int ACCENT = 0xffdcd1ff;
+    private static final float MIN_FIT_SCALE = 0.7f;
     private static final long FIRST_DELAY_MS = 50;
     private static final long STAGGER_MS = 90;
     private static final long WORD_MS = 700;
@@ -43,16 +46,72 @@ public class AuroraHeadlineTextView extends TextView {
     private long revealStart = -1;
     private View pendingSubtitle;
 
+    // The size asked for, and what it was fitted to, so a long word can shrink it.
+    private float wantedSizePx;
+    private int fittedWidth = -1;
+    private CharSequence fittedText;
+    private TextPaint fitPaint;
+
     public AuroraHeadlineTextView(Context context) {
         super(context);
         if (AuroraTheme.isActive()) {
-            setLetterSpacing(-0.02f);
+            setLetterSpacing(-0.03f);
         }
     }
 
     @Override
     public void setTextSize(int unit, float size) {
-        super.setTextSize(unit, AuroraTheme.isActive() ? size * AURORA_SCALE : size);
+        super.setTextSize(unit, size);
+        wantedSizePx = getTextSize();
+        fittedWidth = -1;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (AuroraTheme.isActive() && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            fitLongestWord(MeasureSpec.getSize(widthMeasureSpec) - getCompoundPaddingLeft() - getCompoundPaddingRight());
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    /**
+     * Big headlines in long languages ("Bestätigungscode") would otherwise
+     * break inside a word. Scale down just enough that the longest word fits.
+     */
+    private void fitLongestWord(int available) {
+        CharSequence text = getText();
+        if (available <= 0 || wantedSizePx <= 0 || (available == fittedWidth && text == fittedText)) {
+            return;
+        }
+        fittedWidth = available;
+        fittedText = text;
+        if (fitPaint == null) {
+            fitPaint = new TextPaint(getPaint());
+        }
+        fitPaint.set(getPaint());
+        fitPaint.setTextSize(wantedSizePx);
+        float longest = 0;
+        int length = text == null ? 0 : text.length();
+        int i = 0;
+        while (i < length) {
+            while (i < length && Character.isWhitespace(text.charAt(i))) {
+                i++;
+            }
+            int start = i;
+            while (i < length && !Character.isWhitespace(text.charAt(i))) {
+                i++;
+            }
+            if (start < i) {
+                longest = Math.max(longest, fitPaint.measureText(text, start, i));
+            }
+        }
+        float size = wantedSizePx;
+        if (longest > available) {
+            size = Math.max(wantedSizePx * MIN_FIT_SCALE, wantedSizePx * available / longest);
+        }
+        if (Math.abs(size - getTextSize()) > 0.5f) {
+            super.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
+        }
     }
 
     @Override

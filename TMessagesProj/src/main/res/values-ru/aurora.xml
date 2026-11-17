@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="AuroraLoginFootnote">%1$s работает с Telegram напрямую, без посторонних серверов.</string>
+  <string name="AuroraVerify">Подтвердить</string>
+  <string name="AuroraHidePassword">Скрыть пароль</string>
+  <string name="AuroraYoureIn">Готово, %1$s</string>
+  <string name="AuroraSignedInAs">Вход выполнен: %1$s</string>
+  <string name="AuroraOpenMyChats">Открыть чаты</string>
+</resources>

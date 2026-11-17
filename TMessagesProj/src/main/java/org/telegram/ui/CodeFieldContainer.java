@@ -33,6 +33,8 @@ public class CodeFieldContainer extends LinearLayout {
     public boolean isFocusSuppressed;
 
     public CodeNumberField[] codeField;
+    // Aurora Motion sign-in: boxes share the full width, 62dp tall, 10dp apart, with 26sp digits.
+    public boolean auroraWide;
 
     public CodeFieldContainer(Context context) {
         super(context);
@@ -76,7 +78,8 @@ public class CodeFieldContainer extends LinearLayout {
                         auroraFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
                         auroraFillPaint.setColor(0x14ffffff);
                     }
-                    float radius = Math.min(AndroidUtilities.rectTmp.width(), AndroidUtilities.rectTmp.height()) * 0.32f;
+                    float radius = auroraWide ? AndroidUtilities.dp(20) : Math.min(AndroidUtilities.rectTmp.width(), AndroidUtilities.rectTmp.height()) * 0.32f;
+                    radius = Math.min(radius, Math.min(AndroidUtilities.rectTmp.width(), AndroidUtilities.rectTmp.height()) / 2f);
                     canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFillPaint);
                     canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, paint);
                 } else {
@@ -183,7 +186,7 @@ public class CodeFieldContainer extends LinearLayout {
                 };
 
                 codeField[a].setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-                codeField[a].setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+                codeField[a].setTextSize(TypedValue.COMPLEX_UNIT_DIP, auroraWide ? 26 : 20);
                 codeField[a].setMaxLines(1);
                 codeField[a].setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
                 codeField[a].setPadding(0, 0, 0, 0);
@@ -211,7 +214,11 @@ public class CodeFieldContainer extends LinearLayout {
                     height = 42;
                     gapSize = 7;
                 }
-                addView(codeField[a], LayoutHelper.createLinear(width, height, Gravity.CENTER_HORIZONTAL, 0, 0, a != length - 1 ? gapSize: 0, 0));
+                if (auroraWide) {
+                    addView(codeField[a], LayoutHelper.createLinear(0, LayoutHelper.MATCH_PARENT, 1f, 0, 0, a != length - 1 ? 10 : 0, 0));
+                } else {
+                    addView(codeField[a], LayoutHelper.createLinear(width, height, Gravity.CENTER_HORIZONTAL, 0, 0, a != length - 1 ? gapSize: 0, 0));
+                }
                 codeField[a].addTextChangedListener(new TextWatcher() {
 
                     @Override

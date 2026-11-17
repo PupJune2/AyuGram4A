@@ -55,6 +55,14 @@ public class AuroraLoginButton {
     }
 
     /**
+     * Changes the label, like the design's Continue / Verify / Unlock, with a
+     * quick cross-fade.
+     */
+    public void setText(CharSequence text, boolean animated) {
+        label.setText(text == null ? "" : text.toString(), animated && AuroraTheme.canAnimate());
+    }
+
+    /**
      * @param show true narrows the pill to a circle for the spinner, false widens it back
      */
     public void setLoading(boolean show, boolean animated) {
@@ -123,10 +131,15 @@ public class AuroraLoginButton {
      * "Continue" in 16dp medium with a right arrow 10dp after it (mirrored for RTL).
      */
     private static class Label extends View {
+        private static final long SWAP_MS = 240;
+
         private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final Paint arrowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path arrow = new Path();
-        private final String text;
+        private String text;
+        private String oldText;
+        private float swap = 1f;
+        private ValueAnimator swapAnimator;
 
         Label(Context context, CharSequence text) {
             super(context);
@@ -142,8 +155,46 @@ public class AuroraLoginButton {
             arrowPaint.setStrokeJoin(Paint.Join.ROUND);
         }
 
+        void setText(String newText, boolean animated) {
+            if (newText.equals(text)) {
+                return;
+            }
+            if (swapAnimator != null) {
+                swapAnimator.cancel();
+                swapAnimator = null;
+            }
+            if (!animated || !isAttachedToWindow()) {
+                text = newText;
+                oldText = null;
+                swap = 1f;
+                invalidate();
+                return;
+            }
+            oldText = swap < 0.5f && oldText != null ? oldText : text;
+            text = newText;
+            swapAnimator = ValueAnimator.ofFloat(0f, 1f);
+            swapAnimator.addUpdateListener(a -> {
+                swap = (float) a.getAnimatedValue();
+                invalidate();
+            });
+            swapAnimator.setDuration(SWAP_MS);
+            swapAnimator.start();
+        }
+
         @Override
         protected void onDraw(Canvas canvas) {
+            // The old label fades out in the first half, the new one fades in during the second.
+            if (swap < 0.5f && oldText != null) {
+                drawLabel(canvas, oldText, 1f - swap * 2f);
+            } else {
+                drawLabel(canvas, text, oldText == null ? 1f : (swap - 0.5f) * 2f);
+            }
+        }
+
+        private void drawLabel(Canvas canvas, String text, float alpha) {
+            int a = (int) (255 * Math.max(0f, Math.min(1f, alpha)));
+            textPaint.setAlpha(a);
+            arrowPaint.setAlpha(a);
             float textWidth = textPaint.measureText(text);
             float arrowSize = AndroidUtilities.dp(18);
             float gap = AndroidUtilities.dp(10);

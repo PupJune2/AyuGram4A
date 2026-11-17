@@ -6,4 +6,6 @@
   <string name="AuroraYoureIn">Готово, %1$s</string>
   <string name="AuroraSignedInAs">Вход выполнен: %1$s</string>
   <string name="AuroraOpenMyChats">Открыть чаты</string>
+  <!-- Aurora Motion chat list: the greeting title -->
+  <string name="AuroraHello">Привет, %1$s</string>
 </resources>

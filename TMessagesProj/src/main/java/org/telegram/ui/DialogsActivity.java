@@ -45,6 +45,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.util.LongSparseArray;
 import android.util.Property;
 import android.util.StateSet;
@@ -695,6 +698,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     auroraAlpha = (1f - progressToActionMode) * (whiteActionBar ? 1f - searchAnimationProgress : 1f);
                 }
                 auroraHeaderView.setHeader(top, actionBarHeight, auroraAlpha);
+                actionBar.setAuroraGlassAlpha(auroraAlpha);
             }
             if (whiteActionBar) {
                 if (searchAnimationProgress == 1f) {
@@ -2553,7 +2557,40 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return actionBar;
     }
 
-    private String actionBarDefaultTitle;
+    private CharSequence actionBarDefaultTitle;
+
+    /**
+     * The chat list title. Under Aurora Motion, when the title is the user's
+     * first name (exteraGram's default), it greets them like the design:
+     * "Hello, Max" with the name in pale lavender.
+     */
+    private CharSequence defaultTitle() {
+        String title = LocaleUtils.getActionBarTitle();
+        if (!AuroraTheme.isActive() || ExteraConfig.titleText != 2 || TextUtils.isEmpty(title)) {
+            return title;
+        }
+        String greeting = LocaleController.formatString(R.string.AuroraHello, title);
+        SpannableString spannable = new SpannableString(greeting);
+        int start = greeting.lastIndexOf(title);
+        if (start >= 0) {
+            spannable.setSpan(new ForegroundColorSpan(AuroraTheme.TYPING), start, start + title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return spannable;
+    }
+
+    /** The greeting rises into place once, the first time the chat list shows. */
+    private void riseInTitle() {
+        if (!AuroraTheme.isActive() || !AuroraTheme.canAnimate() || actionBar == null) {
+            return;
+        }
+        View title = actionBar.getTitleTextView();
+        if (title == null) {
+            return;
+        }
+        title.setAlpha(0f);
+        title.setTranslationY(AndroidUtilities.dp(14));
+        title.post(() -> title.animate().alpha(1f).translationY(0).setStartDelay(80).setDuration(700).setInterpolator(AuroraTheme.RISE).start());
+    }
 
     @Override
     public View createView(final Context context) {
@@ -2769,8 +2806,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, AndroidUtilities.dp(26));
                 statusDrawable.center = true;
-                actionBar.setTitle(actionBarDefaultTitle = LocaleUtils.getActionBarTitle(), statusDrawable);
+                actionBar.setTitle(actionBarDefaultTitle = defaultTitle(), statusDrawable);
                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
+                if (!onlySelect && !inPreviewMode) {
+                    riseInTitle();
+                }
             }
             if (folderId == 0) {
                 actionBar.setSupportsHolidayImage(true);
@@ -3073,7 +3113,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 public void onTabSelected(FilterTabsView.Tab tab, boolean forward, boolean animated) {
                     if (ExteraConfig.tabIcons != 2) {
                         if (lastTitleType == 2) {
-                            actionBar.setTitle(LocaleUtils.getActionBarTitle(), statusDrawable);
+                            actionBar.setTitle(defaultTitle(), statusDrawable);
                             lastTitleType = ExteraConfig.tabIcons;
                         }
                         return;
@@ -5604,7 +5644,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[a].listView.requestLayout();
                     viewPages[a].requestLayout();
                 }
-                if (!actionBarDefaultTitle.equals(actionBar.getTitle())) {
+                if (!TextUtils.equals(actionBarDefaultTitle != null ? actionBarDefaultTitle.toString() : null, actionBar.getTitle())) {
                     if (animated) {
                         actionBar.setTitleAnimatedX(actionBarDefaultTitle, statusDrawable, false, 350);
                     } else {
@@ -9053,7 +9093,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else if (id == NotificationCenter.userEmojiStatusUpdated) {
             updateStatus((TLRPC.User) args[0], true);
         } else if (id == NotificationCenter.currentUserPremiumStatusChanged) {
-            actionBar.setTitle(actionBarDefaultTitle = LocaleUtils.getActionBarTitle(), statusDrawable);
+            actionBar.setTitle(actionBarDefaultTitle = defaultTitle(), statusDrawable);
             updateStatus(UserConfig.getInstance(account).getCurrentUser(), true);
         } else if (id == NotificationCenter.onDatabaseReset) {
             dialogsLoaded[currentAccount] = false;

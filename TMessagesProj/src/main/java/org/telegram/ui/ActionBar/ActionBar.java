@@ -1908,32 +1908,52 @@ public class ActionBar extends FrameLayout {
             if (auroraLights.draw(canvas, 0, 0, getMeasuredWidth(), getMeasuredHeight(), 255)) {
                 postInvalidateDelayed(AuroraLights.FRAME_DELAY_MS);
             }
-            // The design's glass back button.
-            if (backButtonImageView != null && backButtonImageView.getVisibility() == VISIBLE && backButtonImageView.getAlpha() > 0f) {
-                AuroraTheme.drawGlassCircle(canvas,
-                        backButtonImageView.getX() + backButtonImageView.getWidth() / 2f,
-                        backButtonImageView.getY() + backButtonImageView.getHeight() / 2f,
-                        AndroidUtilities.dp(20), backButtonImageView.getAlpha());
-            }
-            // And glass circles behind the round header buttons (call, more).
-            if (menu != null && menu.getVisibility() == VISIBLE && menu.getAlpha() > 0f && !isSearchFieldVisible) {
-                for (int i = 0; i < menu.getChildCount(); i++) {
-                    View child = menu.getChildAt(i);
-                    if (!(child instanceof ActionBarMenuItem) || child.getVisibility() != VISIBLE || child.getAlpha() <= 0f) {
-                        continue;
-                    }
-                    ActionBarMenuItem item = (ActionBarMenuItem) child;
-                    if (item.isSearchField() || item.getIconView() == null || item.getIconView().getVisibility() != VISIBLE) {
-                        continue;
-                    }
-                    AuroraTheme.drawGlassCircle(canvas,
-                            menu.getX() + child.getX() + child.getWidth() / 2f,
-                            menu.getY() + child.getY() + child.getHeight() / 2f,
-                            AndroidUtilities.dp(20), child.getAlpha() * menu.getAlpha());
-                }
-            }
+            drawAuroraGlass(canvas, 1f);
+        } else if (auroraGlassAlpha > 0f && !isActionModeShowed() && AuroraTheme.isActive()) {
+            drawAuroraGlass(canvas, auroraGlassAlpha);
         }
         super.dispatchDraw(canvas);
+    }
+
+    private float auroraGlassAlpha;
+
+    /**
+     * Aurora Motion: draws the glass circles behind the header's round buttons
+     * without the lights, for screens that paint the aurora themselves (the
+     * chat list). {@code alpha} 0 turns them off.
+     */
+    public void setAuroraGlassAlpha(float alpha) {
+        if (auroraGlassAlpha != alpha) {
+            auroraGlassAlpha = alpha;
+            invalidate();
+        }
+    }
+
+    private void drawAuroraGlass(Canvas canvas, float alpha) {
+        // The design's glass back (or menu) button.
+        if (backButtonImageView != null && backButtonImageView.getVisibility() == VISIBLE && backButtonImageView.getAlpha() > 0f) {
+            AuroraTheme.drawGlassCircle(canvas,
+                    backButtonImageView.getX() + backButtonImageView.getWidth() / 2f,
+                    backButtonImageView.getY() + backButtonImageView.getHeight() / 2f,
+                    AndroidUtilities.dp(20), backButtonImageView.getAlpha() * alpha);
+        }
+        // And glass circles behind the round header buttons (call, search, more).
+        if (menu != null && menu.getVisibility() == VISIBLE && menu.getAlpha() > 0f && !isSearchFieldVisible) {
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View child = menu.getChildAt(i);
+                if (!(child instanceof ActionBarMenuItem) || child.getVisibility() != VISIBLE || child.getAlpha() <= 0f) {
+                    continue;
+                }
+                ActionBarMenuItem item = (ActionBarMenuItem) child;
+                if (item.isSearchField() && isSearchFieldVisible || item.getIconView() == null || item.getIconView().getVisibility() != VISIBLE) {
+                    continue;
+                }
+                AuroraTheme.drawGlassCircle(canvas,
+                        menu.getX() + child.getX() + child.getWidth() / 2f,
+                        menu.getY() + child.getY() + child.getHeight() / 2f,
+                        AndroidUtilities.dp(20), child.getAlpha() * menu.getAlpha() * alpha);
+            }
+        }
     }
 
     public void setForceSkipTouches(boolean forceSkipTouches) {

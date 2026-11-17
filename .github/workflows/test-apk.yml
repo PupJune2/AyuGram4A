@@ -86,7 +86,7 @@ jobs:
           path: |
             TMessagesProj/.cxx
             TMessagesProj/build/intermediates/cxx
-          key: cxx-${{ inputs.abi || 'arm64-v8a' }}-${{ hashFiles('TMessagesProj/jni/**', 'TMessagesProj/build.gradle') }}
+          key: cxx-v2-${{ inputs.abi || 'arm64-v8a' }}-${{ hashFiles('TMessagesProj/jni/**', 'TMessagesProj/build.gradle') }}
 
       - name: Mark cached native objects as up to date
         if: steps.cxx-cache.outputs.cache-hit == 'true'
@@ -96,13 +96,24 @@ jobs:
         run: |
           chmod +x gradlew
           ABI="${{ inputs.abi || 'arm64-v8a' }}"
-          EXTRA=""
-          if [ "$ABI" != "both" ]; then EXTRA="-Pandroid.injected.build.abi=$ABI"; fi
-          ./gradlew assembleBetaDebug $EXTRA --stacktrace
-          # Builds with an injected ABI write the APK under intermediates/, not outputs/
+          if [ "$ABI" = "both" ]; then ABI="armeabi-v7a,arm64-v8a"; fi
+          # Don't use android.injected.build.abi: AGP then marks the APK testOnly,
+          # and phones refuse to install it ("App not installed").
+          ./gradlew assembleBetaDebug -PbetaAbis="$ABI" --stacktrace
+
+      - name: Check the APK installs on a phone
+        run: |
           mkdir -p apk-out
-          find TMessagesProj/build -name '*.apk' -path '*beta*' -exec cp {} apk-out/ \;
+          cp TMessagesProj/build/outputs/apk/beta/debug/*.apk apk-out/
           ls -la apk-out
+          BT="$ANDROID_HOME/build-tools/33.0.1"
+          for apk in apk-out/*.apk; do
+            "$BT/aapt2" dump badging "$apk" | grep -E "^package:|sdkVersion|native-code" || true
+            if "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$apk" | grep -q testOnly; then
+              echo "::error::$apk is marked testOnly and won't install"; exit 1
+            fi
+            "$BT/apksigner" verify --print-certs "$apk" | head -3
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

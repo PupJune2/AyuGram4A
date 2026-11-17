@@ -15,6 +15,7 @@ import android.widget.LinearLayout;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.PhoneFormat.PhoneFormat;
@@ -186,6 +187,7 @@ public class CodeFieldContainer extends LinearLayout {
                 };
 
                 codeField[a].setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+                AuroraEnergy.pulseWhileTyping(codeField[a], AuroraEnergy.CODE_DIGIT);
                 codeField[a].setTextSize(TypedValue.COMPLEX_UNIT_DIP, auroraWide ? 26 : 20);
                 codeField[a].setMaxLines(1);
                 codeField[a].setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));

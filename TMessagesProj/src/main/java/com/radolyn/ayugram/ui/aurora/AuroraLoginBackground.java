@@ -22,7 +22,8 @@ import org.telegram.ui.Components.CubicBezierInterpolator;
  * (phone, code, password, done), a fade to solid dark towards the bottom, and
  * the design's top row: the app's logo and name on the left, the step dots on
  * the right. Sizes follow the design's 390-wide frame, scaled to the screen
- * width.
+ * width. Aurora Flow's living light ({@link AuroraEnergy}) leans the lights
+ * towards the finger and swells them as you type and move through the steps.
  */
 public class AuroraLoginBackground extends View {
 
@@ -87,11 +88,11 @@ public class AuroraLoginBackground extends View {
         // Positions, sizes and per-step moves are the design's, in dp of a 390dp-wide screen:
         // {left, top, size, blur, opacity, drift period, reversed}, then {dx, dy, scale} per step.
         lights = new Light[]{
-                new Light(AuroraTheme.VIOLET, -90, -70, 340, 64, 0.85f, 9_000, false,
+                new Light(0, AuroraTheme.VIOLET, -90, -70, 340, 64, 0.85f, 9_000, false,
                         new float[][]{{0, 0, 1f}, {170, 30, 1f}, {60, 170, 1.1f}, {110, 70, 1.2f}}),
-                new Light(AuroraTheme.BLUE, 200, 110, 300, 64, 0.8f, 11_000, true,
+                new Light(1, AuroraTheme.BLUE, 200, 110, 300, 64, 0.8f, 11_000, true,
                         new float[][]{{0, 0, 1f}, {-170, -30, 1f}, {-50, 120, 1f}, {-90, 10, 1f}}),
-                new Light(AuroraTheme.TEAL, 10, 300, 280, 70, 0.6f, 13_000, false,
+                new Light(2, AuroraTheme.TEAL, 10, 300, 280, 70, 0.6f, 13_000, false,
                         new float[][]{{0, 0, 1f}, {90, -80, 1f}, {-30, -170, 1f}, {50, -80, 1.15f}}),
         };
 
@@ -170,6 +171,8 @@ public class AuroraLoginBackground extends View {
             }
             fromStep = step;
             stepStart = now;
+            // Each step swells the light; signing in fully swells it all the way.
+            AuroraEnergy.pulse(newStep == STEP_DONE ? AuroraEnergy.LOGIN_DONE : AuroraEnergy.LOGIN_STEP);
         } else {
             for (Light light : lights) {
                 light.clearFrom();
@@ -216,8 +219,11 @@ public class AuroraLoginBackground extends View {
         float scale = width / (float) AndroidUtilities.dp(DESIGN_WIDTH_DP);
         float rawStep = animate ? stepProgress(now) : 1f;
         float move = STEP_EASE.getInterpolation(rawStep);
+        float energy = AuroraEnergy.energy();
+        float pointerX = AuroraEnergy.pointerX();
+        float pointerY = AuroraEnergy.pointerY();
         for (Light light : lights) {
-            light.draw(canvas, scale, step, move, animate ? now - startTime : 0);
+            light.draw(canvas, scale, step, move, animate ? now - startTime : 0, energy, pointerX, pointerY);
         }
 
         // linear-gradient(to bottom, transparent 30%, rgba(11,11,16,.86) 58%, #0B0B10 72%)
@@ -349,6 +355,8 @@ public class AuroraLoginBackground extends View {
         // ease-in-out for the drift, like the design's amDrift keyframes.
         private static final CubicBezierInterpolator DRIFT_EASE = CubicBezierInterpolator.EASE_BOTH;
 
+        final float lean;
+        final float opacity;
         final float left;
         final float top;
         final float radius;
@@ -363,7 +371,9 @@ public class AuroraLoginBackground extends View {
         // Where the light started its current step move, or null to start from the previous step's spot.
         float[] from;
 
-        Light(int color, float left, float top, float size, float blur, float opacity, long period, boolean reverse, float[][] steps) {
+        Light(int index, int color, float left, float top, float size, float blur, float opacity, long period, boolean reverse, float[][] steps) {
+            this.lean = AuroraEnergy.lean(index);
+            this.opacity = opacity;
             this.left = left;
             this.top = top;
             this.radius = size / 2f;
@@ -375,12 +385,13 @@ public class AuroraLoginBackground extends View {
             extent = radius + blur * 2.5f;
             float r = radius / extent;
             float s = blur / extent;
+            // Full strength here; the opacity goes on the paint so energy can raise it.
             shader = new RadialGradient(0, 0, 1f,
                     new int[]{
-                            withAlpha(color, opacity),
-                            withAlpha(color, opacity * 0.84f),
-                            withAlpha(color, opacity * 0.5f),
-                            withAlpha(color, opacity * 0.16f),
+                            withAlpha(color, 1f),
+                            withAlpha(color, 0.84f),
+                            withAlpha(color, 0.5f),
+                            withAlpha(color, 0.16f),
                             withAlpha(color, 0f)
                     },
                     new float[]{0f, Math.max(0f, r - s), r, Math.min(1f, r + s), 1f},
@@ -399,7 +410,7 @@ public class AuroraLoginBackground extends View {
             from = null;
         }
 
-        void draw(Canvas canvas, float scale, int step, float move, long time) {
+        void draw(Canvas canvas, float scale, int step, float move, long time, float energy, float pointerX, float pointerY) {
             float[] a = from != null ? from : steps[step];
             float[] b = steps[step];
             float dx = a[0] + (b[0] - a[0]) * move;
@@ -416,13 +427,17 @@ public class AuroraLoginBackground extends View {
                 drift = 1f;
             }
 
+            // Living light: translate(px * f, py * f) * (1 + energy), scale(1 + energy * .24),
+            // opacity + energy * .12.
             float unit = AndroidUtilities.dp(1) * scale;
-            float cx = (left + radius + dx + 24 * drift) * unit;
-            float cy = (top + radius + dy + 18 * drift) * unit;
-            float r = extent * stepScale * (1f + 0.08f * drift) * unit;
+            float reach = lean * (1f + energy);
+            float cx = (left + radius + dx + 24 * drift + pointerX * reach) * unit;
+            float cy = (top + radius + dy + 18 * drift + pointerY * reach) * unit;
+            float r = extent * stepScale * (1f + 0.08f * drift) * (1f + 0.24f * energy) * unit;
             matrix.setScale(r, r);
             matrix.postTranslate(cx, cy);
             shader.setLocalMatrix(matrix);
+            paint.setAlpha(Math.round(255 * Math.min(1f, opacity + 0.12f * energy)));
             canvas.drawCircle(cx, cy, r, paint);
         }
 

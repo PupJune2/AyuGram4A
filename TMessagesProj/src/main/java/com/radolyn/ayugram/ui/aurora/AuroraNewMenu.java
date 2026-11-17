@@ -128,6 +128,7 @@ public class AuroraNewMenu extends FrameLayout {
             return;
         }
         menuShown = true;
+        AuroraEnergy.pulse(AuroraEnergy.MENU);
         cancelAnimation();
         if (anchor != null && column.getHeight() > 0) {
             float anchorTop = anchor.getTop() + anchor.getTranslationY() - getTop();

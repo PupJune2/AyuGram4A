@@ -43,6 +43,7 @@ import android.widget.ImageView;
 import androidx.core.graphics.ColorUtils;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
 import com.radolyn.ayugram.ui.aurora.AuroraChatsHeader;
 import com.radolyn.ayugram.ui.aurora.AuroraLights;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
@@ -1906,6 +1907,17 @@ public class ActionBar extends FrameLayout {
         invalidate();
     }
 
+    private AuroraChatStage auroraStage;
+
+    /**
+     * Aurora Flow: the bar shows its slice of the chat's light (the stage the
+     * chat background also draws), so header and messages share one surface.
+     */
+    public void setAuroraStage(AuroraChatStage stage) {
+        auroraStage = stage;
+        invalidate();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
@@ -1924,7 +1936,15 @@ public class ActionBar extends FrameLayout {
             canvas.save();
             canvas.translate(0, auroraPin);
         }
-        if (auroraLights != null && actionBarColor == AuroraTheme.HEADER_BASE && !isActionModeShowed() && AuroraTheme.isActive()) {
+        if (auroraStage != null && !isActionModeShowed() && auroraStage.isEnabled()) {
+            View parent = (View) getParent();
+            int stageHeight = parent != null && parent.getMeasuredHeight() > 0 ? parent.getMeasuredHeight() : getMeasuredHeight();
+            canvas.save();
+            canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            auroraStage.draw(canvas, this, getY(), getMeasuredHeight(), getMeasuredWidth(), stageHeight);
+            canvas.restore();
+            drawAuroraGlass(canvas, 1f);
+        } else if (auroraLights != null && actionBarColor == AuroraTheme.HEADER_BASE && !isActionModeShowed() && AuroraTheme.isActive()) {
             if (auroraLights.draw(canvas, 0, 0, getMeasuredWidth(), getMeasuredHeight(), 255)) {
                 postInvalidateDelayed(AuroraLights.FRAME_DELAY_MS);
             }

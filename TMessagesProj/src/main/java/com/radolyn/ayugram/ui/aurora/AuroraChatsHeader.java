@@ -176,6 +176,10 @@ public final class AuroraChatsHeader {
     /** 0 open, 1 folded into one small line. */
     public void setFold(float fold) {
         fold = Math.max(0f, Math.min(1f, fold));
+        if ((this.fold < 0.5f) != (fold < 0.5f)) {
+            // Folding or reopening the greeting gives the light a small push.
+            AuroraEnergy.pulse(AuroraEnergy.COLLAPSE);
+        }
         if (this.fold != fold) {
             this.fold = fold;
             host.invalidate();

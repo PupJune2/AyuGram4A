@@ -92,6 +92,7 @@ import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
 import com.radolyn.ayugram.ui.aurora.AuroraChatsHeader;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraHeaderView;
 import com.radolyn.ayugram.ui.aurora.AuroraNewMenu;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
@@ -2690,6 +2691,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             @Override
             public void onSearchExpand() {
                 searching = true;
+                AuroraEnergy.pulse(AuroraEnergy.SEARCH);
                 if (switchItem != null) {
                     switchItem.setVisibility(View.GONE);
                 }
@@ -2745,6 +2747,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             @Override
             public void onSearchCollapse() {
                 searching = false;
+                AuroraEnergy.pulse(AuroraEnergy.SEARCH);
                 searchWas = false;
                 if (viewPages[0] != null) {
                     viewPages[0].listView.setEmptyView(folderId == 0 ? viewPages[0].progressView : null);
@@ -2804,6 +2807,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         searchItem.setSearchFieldHint(LocaleController.getString("Search", R.string.Search));
         searchItem.setContentDescription(LocaleController.getString("Search", R.string.Search));
+        if (searchItem.getSearchField() != null) {
+            AuroraEnergy.pulseWhileTyping(searchItem.getSearchField(), AuroraEnergy.SEARCH_TYPE);
+        }
         if (!onlySelect && searchString == null && folderId == 0 && initialDialogsType == DIALOGS_TYPE_DEFAULT) {
             // Aurora Flow: your avatar at the right end of the bar opens settings.
             auroraProfileItem = menu.addItem(aurora_profile, new ColorDrawable(Color.TRANSPARENT));
@@ -2975,6 +2981,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (viewPages[0].selectedType == tab.id) {
                         return;
                     }
+                    AuroraEnergy.pulse(AuroraEnergy.TAB);
                     if (tab.isLocked) {
                         filterTabsView.shakeLock(tab.id);
                         showDialog(new LimitReachedBottomSheet(DialogsActivity.this, context, LimitReachedBottomSheet.TYPE_FOLDERS, currentAccount));
@@ -7431,6 +7438,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 blurredView.setAlpha(progress);
             }
+        }
+    }
+
+    @Override
+    public void onTransitionAnimationStart(boolean isOpen, boolean backward) {
+        super.onTransitionAnimationStart(isOpen, backward);
+        if (isOpen) {
+            // Aurora Flow: coming (back) to the chats swells the header's light.
+            AuroraEnergy.pulse(AuroraEnergy.CHATS);
         }
     }
 

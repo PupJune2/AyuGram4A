@@ -139,6 +139,9 @@ public class SizeNotifierFrameLayout extends FrameLayout {
 
         @Override
         protected void onDraw(Canvas canvas) {
+            if (!skipBackgroundDrawing && drawAuroraBackground(canvas, this)) {
+                return;
+            }
             if (backgroundDrawable == null || skipBackgroundDrawing) {
                 return;
             }
@@ -511,6 +514,15 @@ public class SizeNotifierFrameLayout extends FrameLayout {
             this.skipBackgroundDrawing = skipBackgroundDrawing;
             backgroundView.invalidate();
         }
+    }
+
+    /**
+     * Aurora Flow: lets a screen paint its own light instead of the wallpaper.
+     *
+     * @return true when it drew, so the wallpaper is skipped
+     */
+    protected boolean drawAuroraBackground(Canvas canvas, View view) {
+        return false;
     }
 
     protected Drawable getNewDrawable() {

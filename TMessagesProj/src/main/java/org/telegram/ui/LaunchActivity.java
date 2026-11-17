@@ -98,6 +98,7 @@ import com.radolyn.ayugram.AyuConfig;
 import com.radolyn.ayugram.AyuConstants;
 import com.radolyn.ayugram.AyuCustomHandlers;
 import com.radolyn.ayugram.AyuUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
@@ -7101,6 +7102,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        // Aurora Flow: the lights lean towards the finger and swell a little on each tap.
+        View decor = getWindow() != null ? getWindow().peekDecorView() : null;
+        if (decor != null) {
+            AuroraEnergy.onTouch(ev, decor.getWidth(), decor.getHeight());
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     @Override

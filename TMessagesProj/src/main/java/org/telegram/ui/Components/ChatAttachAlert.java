@@ -73,6 +73,7 @@ import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.PopupUtils;
 import com.exteragram.messenger.utils.SystemUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.Utilities;
@@ -3463,6 +3464,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
         buttonsAnimation = new AnimatorSet();
         if (AuroraTheme.isActive()) {
+            AuroraEnergy.pulse(AuroraEnergy.SHEET);
             // The tiles pop in left to right; the value is in milliseconds.
             buttonsAnimation.playTogether(ObjectAnimator.ofFloat(this, ATTACH_ALERT_PROGRESS, 0.0f, AURORA_TILES_MS));
             buttonsAnimation.setDuration((long) AURORA_TILES_MS);

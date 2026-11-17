@@ -55,6 +55,8 @@ public final class AuroraMessageMotion {
             return;
         }
         boolean out = view instanceof ChatMessageCell && ((ChatMessageCell) view).getMessageObject() != null && ((ChatMessageCell) view).getMessageObject().isOutOwner();
+        // Aurora Flow: sending swells the light the most, a reply a bit less.
+        AuroraEnergy.pulse(out ? AuroraEnergy.SEND : AuroraEnergy.REPLY);
         play(view, out ? KIND_SEND : KIND_REPLY, 0, animateAlpha);
     }
 

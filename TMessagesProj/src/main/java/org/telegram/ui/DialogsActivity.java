@@ -45,6 +45,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.util.LongSparseArray;
 import android.util.Property;
 import android.util.StateSet;
@@ -88,6 +91,8 @@ import com.exteragram.messenger.components.TranslateBeforeSendWrapper;
 import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraChatsHeader;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraHeaderView;
 import com.radolyn.ayugram.ui.aurora.AuroraNewMenu;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
@@ -310,6 +315,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private ProxyDrawable proxyDrawable;
     private RLottieImageView floatingButton;
     private AuroraHeaderView auroraHeaderView;
+    private AuroraChatsHeader auroraChatsHeader;
+    private ActionBarMenuItem auroraProfileItem;
+    private BackupImageView auroraProfileImage;
+    private AvatarDrawable auroraProfileAvatar;
+    private final Paint auroraTabsPaint = new Paint();
+    // Aurora Flow's folding greeting: whether it is laid out, and how tall it is right now.
+    private boolean auroraHeroOn;
+    private int auroraHeroExtra;
     private AuroraNewMenu auroraNewMenu;
     private ImageView auroraCloseIcon;
     private AnimatorSet auroraFabIconAnimator;
@@ -480,6 +493,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private final static int archive2 = 107;
     private final static int pin2 = 108;
     private final static int add_to_folder = 109;
+    private final static int aurora_profile = 8;
     private final static int remove_from_folder = 110;
 
     private final static int ARCHIVE_ITEM_STATE_PINNED = 0;
@@ -694,7 +708,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (folderId == 0 && AuroraTheme.isActive()) {
                     auroraAlpha = (1f - progressToActionMode) * (whiteActionBar ? 1f - searchAnimationProgress : 1f);
                 }
-                auroraHeaderView.setHeader(top, actionBarHeight, auroraAlpha);
+                if (auroraHeroOn) {
+                    // Aurora Flow: the lights fill the bar and its greeting from the top of the
+                    // screen and shrink as it folds; the folder tabs sit below on the list background.
+                    auroraHeaderView.setCornerRadius(AndroidUtilities.dp(32));
+                    auroraHeaderView.setHeader(-getY(), top + actionBar.getHeight() + getY(), auroraAlpha);
+                    if (auroraChatsHeader != null) {
+                        auroraChatsHeader.setHeroAlpha(1f - Math.max(searchAnimationProgress, progressToActionMode));
+                    }
+                } else {
+                    auroraHeaderView.setCornerRadius(AndroidUtilities.dp(24));
+                    auroraHeaderView.setHeader(top, actionBarHeight, auroraAlpha);
+                }
+                actionBar.setAuroraGlassAlpha(auroraAlpha);
             }
             if (whiteActionBar) {
                 if (searchAnimationProgress == 1f) {
@@ -757,6 +783,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     AndroidUtilities.rectTmp2.set(0, top, getMeasuredWidth(), top + actionBarHeight);
                     drawBlurRect(canvas, 0, AndroidUtilities.rectTmp2, actionBarDefaultPaint, true);
                 }
+            }
+            if (auroraHeroOn && auroraAlpha > 0f && actionBarHeight > actionBar.getHeight()) {
+                auroraTabsPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                auroraTabsPaint.setAlpha((int) (auroraTabsPaint.getAlpha() * auroraAlpha));
+                canvas.drawRect(0, top + actionBar.getHeight(), getMeasuredWidth(), top + actionBarHeight, auroraTabsPaint);
             }
             tabsYOffset = 0;
             if ((filtersTabAnimator != null || rightSlidingDialogContainer.hasFragment()) && filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE) {
@@ -842,6 +873,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 layoutParams.height = ActionBar.getCurrentActionBarHeight();
             }
 
+            updateAuroraHeroLayout();
             measureChildWithMargins(actionBar, widthMeasureSpec, 0, heightMeasureSpec, 0);
 
             int keyboardSize = measureKeyboardHeight();
@@ -894,7 +926,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         if (rightSlidingDialogContainer.hasFragment()) {
                             h += AndroidUtilities.dp(48);
                         }
-                    } else if (!onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) {
+                    } else if ((!onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) && !auroraHeroOn) {
                         h -= actionBar.getMeasuredHeight();
                     }
                     if (dialogsHintCell != null) {
@@ -1030,7 +1062,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         if (filterTabsView != null && filterTabsView.getVisibility() == VISIBLE) {
                             childTop = AndroidUtilities.dp(48);
                         } else {
-                            childTop = actionBar.getMeasuredHeight();
+                            childTop = auroraHeroOn ? 0 : actionBar.getMeasuredHeight();
                         }
                     }
                     childTop += topPadding;
@@ -1702,7 +1734,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             if (!onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) {
                 ignoreLayout = true;
-                if (filterTabsView != null && filterTabsView.getVisibility() == VISIBLE) {
+                if (auroraHeroOn) {
+                    // The list starts under the bar and its greeting, which fold away as it scrolls.
+                    t = actionBar.getMeasuredHeight();
+                } else if (filterTabsView != null && filterTabsView.getVisibility() == VISIBLE) {
                     t = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
                 } else {
                     t = inPreviewMode ? AndroidUtilities.statusBarHeight : 0;
@@ -2553,7 +2588,40 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return actionBar;
     }
 
-    private String actionBarDefaultTitle;
+    private CharSequence actionBarDefaultTitle;
+
+    /**
+     * The chat list title. Under Aurora Motion, when the title is the user's
+     * first name (exteraGram's default), it greets them like the design:
+     * "Hello, Max" with the name in pale lavender.
+     */
+    private CharSequence defaultTitle() {
+        String title = LocaleUtils.getActionBarTitle();
+        if (!AuroraTheme.isActive() || ExteraConfig.titleText != 2 || TextUtils.isEmpty(title)) {
+            return title;
+        }
+        String greeting = LocaleController.formatString(R.string.AuroraHello, title);
+        SpannableString spannable = new SpannableString(greeting);
+        int start = greeting.lastIndexOf(title);
+        if (start >= 0) {
+            spannable.setSpan(new ForegroundColorSpan(AuroraTheme.TYPING), start, start + title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return spannable;
+    }
+
+    /** The greeting rises into place once, the first time the chat list shows. */
+    private void riseInTitle() {
+        if (!AuroraTheme.isActive() || !AuroraTheme.canAnimate() || actionBar == null) {
+            return;
+        }
+        View title = actionBar.getTitleTextView();
+        if (title == null) {
+            return;
+        }
+        title.setAlpha(0f);
+        title.setTranslationY(AndroidUtilities.dp(14));
+        title.post(() -> title.animate().alpha(1f).translationY(0).setStartDelay(80).setDuration(700).setInterpolator(AuroraTheme.RISE).start());
+    }
 
     @Override
     public View createView(final Context context) {
@@ -2623,8 +2691,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             @Override
             public void onSearchExpand() {
                 searching = true;
+                AuroraEnergy.pulse(AuroraEnergy.SEARCH);
                 if (switchItem != null) {
                     switchItem.setVisibility(View.GONE);
+                }
+                if (auroraProfileItem != null) {
+                    auroraProfileItem.setVisibility(View.GONE);
                 }
                 if (proxyItem != null && proxyItemVisible) {
                     proxyItem.setVisibility(View.GONE);
@@ -2656,6 +2728,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (switchItem != null) {
                     switchItem.setVisibility(View.VISIBLE);
                 }
+                if (auroraProfileItem != null && auroraHeroOn) {
+                    auroraProfileItem.setVisibility(View.VISIBLE);
+                }
                 if (proxyItem != null && proxyItemVisible) {
                     proxyItem.setVisibility(View.VISIBLE);
                 }
@@ -2672,6 +2747,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             @Override
             public void onSearchCollapse() {
                 searching = false;
+                AuroraEnergy.pulse(AuroraEnergy.SEARCH);
                 searchWas = false;
                 if (viewPages[0] != null) {
                     viewPages[0].listView.setEmptyView(folderId == 0 ? viewPages[0].progressView : null);
@@ -2731,6 +2807,31 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         searchItem.setSearchFieldHint(LocaleController.getString("Search", R.string.Search));
         searchItem.setContentDescription(LocaleController.getString("Search", R.string.Search));
+        if (searchItem.getSearchField() != null) {
+            AuroraEnergy.pulseWhileTyping(searchItem.getSearchField(), AuroraEnergy.SEARCH_TYPE);
+        }
+        if (!onlySelect && searchString == null && folderId == 0 && initialDialogsType == DIALOGS_TYPE_DEFAULT) {
+            // Aurora Flow: your avatar at the right end of the bar opens settings.
+            auroraProfileItem = menu.addItem(aurora_profile, new ColorDrawable(Color.TRANSPARENT));
+            auroraProfileItem.getIconView().setVisibility(View.GONE);
+            auroraProfileImage = new BackupImageView(context) {
+                private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+                @Override
+                protected void onDraw(Canvas canvas) {
+                    super.onDraw(canvas);
+                    // The design's 2px white rim at 70%.
+                    ring.setStyle(Paint.Style.STROKE);
+                    ring.setStrokeWidth(AndroidUtilities.dp(2));
+                    ring.setColor(0xb3ffffff);
+                    canvas.drawCircle(getWidth() / 2f, getHeight() / 2f, Math.min(getWidth(), getHeight()) / 2f - AndroidUtilities.dp(1), ring);
+                }
+            };
+            auroraProfileImage.setRoundRadius(AndroidUtilities.dp(20));
+            auroraProfileItem.addView(auroraProfileImage, LayoutHelper.createFrame(40, 40, Gravity.CENTER));
+            auroraProfileItem.setContentDescription(LocaleController.getString("Settings", R.string.Settings));
+            auroraProfileItem.setVisibility(View.GONE);
+        }
         if (onlySelect) {
             actionBar.setBackButtonImage(R.drawable.ic_ab_back);
             if (initialDialogsType == DIALOGS_TYPE_FORWARD && selectAlertString == null) {
@@ -2769,8 +2870,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, AndroidUtilities.dp(26));
                 statusDrawable.center = true;
-                actionBar.setTitle(actionBarDefaultTitle = LocaleUtils.getActionBarTitle(), statusDrawable);
+                actionBar.setTitle(actionBarDefaultTitle = defaultTitle(), statusDrawable);
                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
+                if (!onlySelect && !inPreviewMode) {
+                    riseInTitle();
+                }
             }
             if (folderId == 0) {
                 actionBar.setSupportsHolidayImage(true);
@@ -2877,6 +2981,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (viewPages[0].selectedType == tab.id) {
                         return;
                     }
+                    AuroraEnergy.pulse(AuroraEnergy.TAB);
                     if (tab.isLocked) {
                         filterTabsView.shakeLock(tab.id);
                         showDialog(new LimitReachedBottomSheet(DialogsActivity.this, context, LimitReachedBottomSheet.TYPE_FOLDERS, currentAccount));
@@ -3073,7 +3178,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 public void onTabSelected(FilterTabsView.Tab tab, boolean forward, boolean animated) {
                     if (ExteraConfig.tabIcons != 2) {
                         if (lastTitleType == 2) {
-                            actionBar.setTitle(LocaleUtils.getActionBarTitle(), statusDrawable);
+                            actionBar.setTitle(defaultTitle(), statusDrawable);
                             lastTitleType = ExteraConfig.tabIcons;
                         }
                         return;
@@ -3481,9 +3586,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             viewPage.dialogsAdapter.notifyDataSetChanged();
                         }
 
-                        if (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && viewPages[0].listView == recyclerView) {
+                        if ((auroraHeroOn || filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE) && viewPages[0].listView == recyclerView) {
                             int scrollY = (int) -actionBar.getTranslationY();
-                            int actionBarHeight = ActionBar.getCurrentActionBarHeight();
+                            int actionBarHeight = headerScrollRange();
                             if (scrollY != 0 && scrollY != actionBarHeight) {
                                 if (scrollY < actionBarHeight / 2) {
                                     if (viewPages[0].listView.canScrollVertically(-1)) {
@@ -3528,7 +3633,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             }
                         }
                     }
-                    if (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && recyclerView == viewPages[0].listView && !searching && !actionBar.isActionModeShowed() && !disableActionBarScrolling && filterTabsViewIsVisible && !rightSlidingDialogContainer.hasFragment()) {
+                    if ((auroraHeroOn || filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && filterTabsViewIsVisible) && recyclerView == viewPages[0].listView && !searching && !actionBar.isActionModeShowed() && !disableActionBarScrolling && !rightSlidingDialogContainer.hasFragment()) {
                         if (dy > 0 && hasHiddenArchive() && viewPages[0].dialogsType == DIALOGS_TYPE_DEFAULT) {
                             View child = recyclerView.getChildAt(0);
                             if (child != null) {
@@ -3548,8 +3653,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                         float currentTranslation = actionBar.getTranslationY();
                         float newTranslation = currentTranslation - dy;
-                        if (newTranslation < -ActionBar.getCurrentActionBarHeight()) {
-                            newTranslation = -ActionBar.getCurrentActionBarHeight();
+                        if (newTranslation < -headerScrollRange()) {
+                            newTranslation = -headerScrollRange();
                         } else if (newTranslation > 0) {
                             newTranslation = 0;
                         }
@@ -5323,6 +5428,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         updatePasscodeButton();
                     } else if (id == 2) {
                         presentFragment(new ProxyListActivity());
+                    } else if (id == aurora_profile) {
+                        Bundle args = new Bundle();
+                        args.putLong("user_id", getUserConfig().getClientUserId());
+                        presentFragment(new ProfileActivity(args));
                     } else if (id == 3) {
                         showSearch(true, true, true);
                         actionBar.openSearchField(true);
@@ -5604,7 +5713,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[a].listView.requestLayout();
                     viewPages[a].requestLayout();
                 }
-                if (!actionBarDefaultTitle.equals(actionBar.getTitle())) {
+                if (!TextUtils.equals(actionBarDefaultTitle != null ? actionBarDefaultTitle.toString() : null, actionBar.getTitle())) {
                     if (animated) {
                         actionBar.setTitleAnimatedX(actionBarDefaultTitle, statusDrawable, false, 350);
                     } else {
@@ -5903,9 +6012,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             closeSearchFieldOnHide = false;
         }
-        if (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && filterTabsViewIsVisible) {
+        if (auroraHeroOn || filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && filterTabsViewIsVisible) {
             int scrollY = (int) -actionBar.getTranslationY();
-            int actionBarHeight = ActionBar.getCurrentActionBarHeight();
+            int actionBarHeight = headerScrollRange();
             if (scrollY != 0 && scrollY != actionBarHeight) {
                 if (scrollY < actionBarHeight / 2) {
                     setScrollY(0);
@@ -6346,6 +6455,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     public void setSearchAnimationProgress(float progress, boolean full) {
         searchAnimationProgress = progress;
+        if (auroraHeroOn && fragmentView != null) {
+            fragmentView.requestLayout();
+        }
         if (whiteActionBar) {
             int color1 = folderId != 0 ? Theme.getColor(Theme.key_actionBarDefaultArchivedIcon) : Theme.getColor(Theme.key_actionBarDefaultIcon);
             actionBar.setItemsColor(ColorUtils.blendARGB(color1, Theme.getColor(Theme.key_actionBarActionModeDefaultIcon), searchAnimationProgress), false);
@@ -7266,6 +7378,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return;
         }
         actionBar.setTranslationY(value);
+        if (auroraHeroOn) {
+            actionBar.setAuroraPin(-value);
+            if (auroraChatsHeader != null) {
+                int range = headerScrollRange();
+                auroraChatsHeader.setFold(range > 0 ? -value / range : 0f);
+            }
+        }
         if (topBulletin != null) {
             topBulletin.updatePosition();
         }
@@ -7323,6 +7442,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     @Override
+    public void onTransitionAnimationStart(boolean isOpen, boolean backward) {
+        super.onTransitionAnimationStart(isOpen, backward);
+        if (isOpen) {
+            // Aurora Flow: coming (back) to the chats swells the header's light.
+            AuroraEnergy.pulse(AuroraEnergy.CHATS);
+        }
+    }
+
+    @Override
     public void onTransitionAnimationEnd(boolean isOpen, boolean backward) {
         if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
             rightSlidingDialogContainer.getFragment().onTransitionAnimationEnd(isOpen, backward);
@@ -7374,6 +7502,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         actionBarColorAnimator = ValueAnimator.ofFloat(progressToActionMode, 0);
         actionBarColorAnimator.addUpdateListener(valueAnimator -> {
             progressToActionMode = (float) valueAnimator.getAnimatedValue();
+            if (auroraHeroOn && fragmentView != null) {
+                fragmentView.requestLayout();
+            }
             for (int i = 0; i < actionBar.getChildCount(); i++) {
                 if (actionBar.getChildAt(i).getVisibility() == View.VISIBLE && actionBar.getChildAt(i) != actionBar.getActionMode() && actionBar.getChildAt(i) != actionBar.getBackButton()) {
                     actionBar.getChildAt(i).setAlpha(1f - progressToActionMode);
@@ -8302,6 +8433,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBarColorAnimator = ValueAnimator.ofFloat(progressToActionMode, 1f);
             actionBarColorAnimator.addUpdateListener(valueAnimator -> {
                 progressToActionMode = (float) valueAnimator.getAnimatedValue();
+                if (auroraHeroOn && fragmentView != null) {
+                    fragmentView.requestLayout();
+                }
                 for (int i = 0; i < actionBar.getChildCount(); i++) {
                     if (actionBar.getChildAt(i).getVisibility() == View.VISIBLE && actionBar.getChildAt(i) != actionBar.getActionMode() && actionBar.getChildAt(i) != actionBar.getBackButton()) {
                         actionBar.getChildAt(i).setAlpha(1f - progressToActionMode);
@@ -8853,6 +8987,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             }
             updateStatus(UserConfig.getInstance(account).getCurrentUser(), true);
+            if ((mask & (MessagesController.UPDATE_MASK_AVATAR | MessagesController.UPDATE_MASK_NAME)) != 0) {
+                updateAuroraProfileImage();
+                updateAuroraGreeting();
+            }
         } else if (id == NotificationCenter.appDidLogout) {
             dialogsLoaded[currentAccount] = false;
         } else if (id == NotificationCenter.encryptedChatUpdated) {
@@ -9053,7 +9191,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else if (id == NotificationCenter.userEmojiStatusUpdated) {
             updateStatus((TLRPC.User) args[0], true);
         } else if (id == NotificationCenter.currentUserPremiumStatusChanged) {
-            actionBar.setTitle(actionBarDefaultTitle = LocaleUtils.getActionBarTitle(), statusDrawable);
+            actionBar.setTitle(actionBarDefaultTitle = defaultTitle(), statusDrawable);
             updateStatus(UserConfig.getInstance(account).getCurrentUser(), true);
         } else if (id == NotificationCenter.onDatabaseReset) {
             dialogsLoaded[currentAccount] = false;
@@ -10591,6 +10729,149 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         return arrayList;
+    }
+
+    private boolean wantsAuroraHero() {
+        return auroraHeaderView != null && auroraProfileItem != null && searchItem != null && actionBar != null
+                && folderId == 0 && initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && searchString == null && !inPreviewMode
+                && AuroraTheme.isActive() && !AndroidUtilities.isTablet() && AndroidUtilities.displaySize.y > AndroidUtilities.displaySize.x;
+    }
+
+    /**
+     * Aurora Flow: sizes the greeting under the chat list bar. Runs while
+     * measuring; the greeting closes while search or selection takes over.
+     */
+    private void updateAuroraHeroLayout() {
+        boolean on = wantsAuroraHero();
+        if (on != auroraHeroOn) {
+            auroraHeroOn = on;
+            AndroidUtilities.runOnUIThread(this::updateAuroraHeroViews);
+        }
+        int extra = 0;
+        if (on) {
+            float closed = Math.max(searchAnimationProgress, progressToActionMode);
+            extra = Math.round(AuroraChatsHeader.openExtra() * (1f - closed));
+        }
+        auroraHeroExtra = extra;
+        if (actionBar.getExtraHeight() != extra) {
+            actionBar.setExtraHeight(extra);
+        }
+        if (on) {
+            float range = headerScrollRange();
+            if (actionBar.getTranslationY() < -range) {
+                setScrollY(-range);
+            }
+        } else if (actionBar.getTranslationY() < -ActionBar.getCurrentActionBarHeight()) {
+            setScrollY(-ActionBar.getCurrentActionBarHeight());
+        }
+    }
+
+    /** How far the chat list's header slides up as the list scrolls. */
+    private int headerScrollRange() {
+        if (auroraHeroOn) {
+            return Math.max(0, auroraHeroExtra - AuroraChatsHeader.foldedExtra());
+        }
+        return ActionBar.getCurrentActionBarHeight();
+    }
+
+    private void updateAuroraHeroViews() {
+        if (actionBar == null || searchItem == null || auroraProfileItem == null) {
+            return;
+        }
+        boolean on = auroraHeroOn;
+        if (on && auroraChatsHeader == null) {
+            auroraChatsHeader = new AuroraChatsHeader(actionBar, new AuroraChatsHeader.Delegate() {
+                @Override
+                public void onSearchPillClick() {
+                    if (searchItem != null && !searching && !actionBar.isActionModeShowed()) {
+                        searchItem.openSearch(true);
+                    }
+                }
+
+                @Override
+                public void onGreetingGesture(int direction) {
+                    foldAuroraHero(direction);
+                }
+            });
+            auroraChatsHeader.setSearchHint(LocaleController.getString("Search", R.string.Search));
+            updateAuroraGreeting();
+            if (!onlySelect && !inPreviewMode) {
+                auroraChatsHeader.startReveal();
+            }
+        }
+        actionBar.setAuroraChatsHeader(on ? auroraChatsHeader : null);
+        actionBar.setAuroraPin(on ? -actionBar.getTranslationY() : 0);
+        if (on && auroraChatsHeader != null) {
+            int range = headerScrollRange();
+            auroraChatsHeader.setFold(range > 0 ? -actionBar.getTranslationY() / range : 0f);
+        }
+        // The search pill takes the place of the search button.
+        ViewGroup.LayoutParams layoutParams = searchItem.getLayoutParams();
+        int width = on ? 0 : AndroidUtilities.dp(48);
+        if (layoutParams != null && layoutParams.width != width) {
+            layoutParams.width = width;
+            searchItem.setLayoutParams(layoutParams);
+        }
+        auroraProfileItem.setVisibility(on && !searching ? View.VISIBLE : View.GONE);
+        updateAuroraProfileImage();
+        if (fragmentView != null) {
+            fragmentView.requestLayout();
+        }
+    }
+
+    private void updateAuroraProfileImage() {
+        if (auroraProfileImage == null) {
+            return;
+        }
+        TLRPC.User user = getUserConfig().getCurrentUser();
+        if (user == null) {
+            return;
+        }
+        if (auroraProfileAvatar == null) {
+            auroraProfileAvatar = new AvatarDrawable();
+        }
+        auroraProfileAvatar.setInfo(user);
+        auroraProfileImage.setForUserOrChat(user, auroraProfileAvatar);
+    }
+
+    private void updateAuroraGreeting() {
+        if (auroraChatsHeader == null) {
+            return;
+        }
+        String title = LocaleUtils.getActionBarTitle();
+        String secondLine = LocaleController.getString("AuroraStayInLoop", R.string.AuroraStayInLoop);
+        if (ExteraConfig.titleText == 2 && !TextUtils.isEmpty(title)) {
+            String greeting = LocaleController.formatString(R.string.AuroraHello, title);
+            int start = greeting.lastIndexOf(title);
+            if (start >= 0) {
+                auroraChatsHeader.setText(greeting.substring(0, start), title, greeting.substring(start + title.length()), secondLine);
+                return;
+            }
+        }
+        auroraChatsHeader.setText(title, null, null, secondLine);
+    }
+
+    /**
+     * Folds or unfolds the greeting by scrolling the list, so the header
+     * moves exactly as it does when you scroll yourself.
+     *
+     * @param direction 1 fold, -1 unfold, 0 toggle
+     */
+    private void foldAuroraHero(int direction) {
+        if (!auroraHeroOn || viewPages == null || viewPages[0] == null || searching || actionBar.isActionModeShowed()) {
+            return;
+        }
+        int range = headerScrollRange();
+        if (range <= 0) {
+            return;
+        }
+        float folded = -actionBar.getTranslationY();
+        boolean fold = direction == 0 ? folded < range / 2f : direction > 0;
+        if (fold) {
+            viewPages[0].listView.smoothScrollBy(0, Math.round(range - folded));
+        } else {
+            viewPages[0].listView.smoothScrollBy(0, -Math.round(folded));
+        }
     }
 
     private void setAuroraNewMenuShown(boolean show, boolean animated) {

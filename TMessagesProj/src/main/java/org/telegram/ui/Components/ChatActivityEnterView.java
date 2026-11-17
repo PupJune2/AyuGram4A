@@ -112,6 +112,8 @@ import com.exteragram.messenger.utils.TranslatorUtils;
 import com.radolyn.ayugram.AyuConfig;
 import com.radolyn.ayugram.utils.AyuState;
 
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.AccountInstance;
@@ -3452,6 +3454,16 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         int bottom = top + Theme.chat_composeShadowDrawable.getIntrinsicHeight();
 
         bottom += chatSearchExpandOffset;
+        if (auroraStage != null && auroraStage.isEnabled() && getParent() instanceof View) {
+            // Aurora Flow: the composer sits on the chat's light, the bottom light glowing behind the field.
+            View parent = (View) getParent();
+            canvas.save();
+            canvas.clipRect(0, bottom, getWidth(), getHeight());
+            auroraStage.draw(canvas, this, getY(), getHeight(), getWidth(), parent.getMeasuredHeight());
+            canvas.restore();
+            drawAuroraField(canvas);
+            return;
+        }
         if (allowBlur) {
             backgroundPaint.setColor(getThemedColor(Theme.key_chat_messagePanelBackground));
             if (SharedConfig.chatBlurEnabled() && sizeNotifierLayout != null) {
@@ -3469,6 +3481,9 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             drawAuroraField(canvas);
         }
     }
+
+    /** Aurora Flow: the chat's light, drawn behind the composer instead of its panel colour. */
+    public AuroraChatStage auroraStage;
 
     private Paint auroraFieldFill;
     private Paint auroraFieldStroke;
@@ -4262,6 +4277,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
                 if (innerTextChange == 1) {
                     return;
+                }
+                if (!ignoreTextChange && (before > 0 || count > 0)) {
+                    // Aurora Flow: the chat's light breathes a little with each keystroke.
+                    AuroraEnergy.pulse(AuroraEnergy.TYPE);
                 }
                 if (sendByEnter && !isPaste && editingMessageObject == null && count > before && charSequence.length() > 0 && charSequence.length() == start + count && charSequence.charAt(charSequence.length() - 1) == '\n') {
                     nextChangeIsSend = true;

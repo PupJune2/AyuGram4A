@@ -95,6 +95,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraHeadlineTextView;
 import com.radolyn.ayugram.ui.aurora.AuroraLoginBackground;
 import com.radolyn.ayugram.ui.aurora.AuroraLoginButton;
@@ -2187,6 +2188,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             codeField.setShowSoftInputOnFocus(!(hasCustomKeyboard() && !isCustomKeyboardForceDisabled()));
             codeField.setContentDescription(LocaleController.getString(R.string.LoginAccessibilityCountryCode));
             linearLayout.addView(codeField, LayoutHelper.createLinear(55, 36, -9, 0, 0, 0));
+            AuroraEnergy.pulseWhileTyping(codeField, AuroraEnergy.FIELD);
             codeField.addTextChangedListener(new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
@@ -2380,6 +2382,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             phoneField.setShowSoftInputOnFocus(!(hasCustomKeyboard() && !isCustomKeyboardForceDisabled()));
             phoneField.setContentDescription(LocaleController.getString(R.string.PhoneNumber));
             linearLayout.addView(phoneField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36));
+            AuroraEnergy.pulseWhileTyping(phoneField, AuroraEnergy.FIELD);
             phoneField.addTextChangedListener(new TextWatcher() {
 
                 private int characterAction = -1;
@@ -5289,6 +5292,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             outlineCodeField = new OutlineTextContainerView(context);
             outlineCodeField.setText(LocaleController.getString(R.string.EnterPassword));
             codeField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(codeField, AuroraEnergy.FIELD);
             codeField.setCursorSize(AndroidUtilities.dp(20));
             codeField.setCursorWidth(1.5f);
             codeField.setBackground(null);
@@ -5865,6 +5869,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             emailOutlineView.setText(LocaleController.getString(activityMode == MODE_CHANGE_LOGIN_EMAIL ? R.string.YourNewEmail : R.string.YourEmail));
 
             emailField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(emailField, AuroraEnergy.FIELD);
             emailField.setCursorSize(AndroidUtilities.dp(20));
             emailField.setCursorWidth(1.5f);
             emailField.setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -7345,6 +7350,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 outlineField.setText(LocaleController.getString(stage == 0 ? a == 0 ? R.string.PleaseEnterNewFirstPasswordHint : R.string.PleaseEnterNewSecondPasswordHint : R.string.PasswordHintPlaceholder));
 
                 codeField[a] = new EditTextBoldCursor(context);
+                AuroraEnergy.pulseWhileTyping(codeField[a], AuroraEnergy.FIELD);
                 codeField[a].setCursorSize(AndroidUtilities.dp(20));
                 codeField[a].setCursorWidth(1.5f);
                 codeField[a].setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -7950,6 +7956,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             firstNameOutlineView.setText(LocaleController.getString(R.string.FirstName));
 
             firstNameField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(firstNameField, AuroraEnergy.FIELD);
             firstNameField.setCursorSize(AndroidUtilities.dp(20));
             firstNameField.setCursorWidth(1.5f);
             firstNameField.setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -7975,6 +7982,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             lastNameOutlineView.setText(LocaleController.getString(R.string.LastName));
 
             lastNameField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(lastNameField, AuroraEnergy.FIELD);
             lastNameField.setCursorSize(AndroidUtilities.dp(20));
             lastNameField.setCursorWidth(1.5f);
             lastNameField.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);

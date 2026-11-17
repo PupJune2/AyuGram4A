@@ -29,6 +29,7 @@ public class AuroraHeaderView extends View {
     private int cornersWidth = -1;
     private float cornersBottom = -1;
     private float cornersRadius = -1;
+    private int cornerRadius = AndroidUtilities.dp(24);
 
     public AuroraHeaderView(Context context) {
         super(context);
@@ -48,6 +49,14 @@ public class AuroraHeaderView extends View {
             headerTop = top;
             headerHeight = height;
             headerAlpha = alpha;
+            invalidate();
+        }
+    }
+
+    /** Radius of the rounded bottom corners (Aurora Motion 24dp, Aurora Flow 32dp). */
+    public void setCornerRadius(int radius) {
+        if (cornerRadius != radius) {
+            cornerRadius = radius;
             invalidate();
         }
     }
@@ -97,7 +106,7 @@ public class AuroraHeaderView extends View {
 
     // Masks the bottom corners with the list background so the header reads as a rounded card.
     private void drawCorners(Canvas canvas, int width, float bottom, int alpha) {
-        final float r = Math.min(AndroidUtilities.dp(24), headerHeight / 2f);
+        final float r = Math.min(cornerRadius, headerHeight / 2f);
         if (cornersWidth != width || cornersBottom != bottom || cornersRadius != r) {
             cornersWidth = width;
             cornersBottom = bottom;

@@ -4,6 +4,8 @@ on:
 
 jobs:
   build:
+    # Needs AyuGram's own self-hosted runner, so skip it in forks instead of queueing forever.
+    if: github.repository == 'AyuGram/AyuGram4A'
     runs-on: self-hosted
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"

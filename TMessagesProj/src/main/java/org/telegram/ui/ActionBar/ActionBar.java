@@ -43,6 +43,10 @@ import android.widget.ImageView;
 import androidx.core.graphics.ColorUtils;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
+import com.radolyn.ayugram.ui.aurora.AuroraChatsHeader;
+import com.radolyn.ayugram.ui.aurora.AuroraLights;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -292,11 +296,15 @@ public class ActionBar extends FrameLayout {
         if (drawBackButton && child == backButtonImageView) {
             return true;
         }
+        // Aurora Flow's chat list shows its greeting under the bar instead of the title.
+        if (auroraChatsHeader != null && AuroraTheme.isActive() && (child == titleTextView[0] || child == titleTextView[1] || child == subtitleTextView || child == additionalSubtitleTextView)) {
+            return false;
+        }
 
         boolean clip = shouldClipChild(child);
         if (clip) {
             canvas.save();
-            canvas.clipRect(0, -getTranslationY() + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0), getMeasuredWidth(), getMeasuredHeight());
+            canvas.clipRect(0, -getTranslationY() - auroraPin + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0), getMeasuredWidth(), getMeasuredHeight());
         }
         boolean result = super.drawChild(canvas, child, drawingTime);
         if (supportsHolidayImage && !titleOverlayShown && !LocaleController.isRTL && (child == titleTextView[0] || child == titleTextView[1])) {
@@ -1101,6 +1109,10 @@ public class ActionBar extends FrameLayout {
         interceptTouchEventListener = listener;
     }
 
+    public int getExtraHeight() {
+        return extraHeight;
+    }
+
     public void setExtraHeight(int value) {
         extraHeight = value;
         if (actionMode != null) {
@@ -1883,6 +1895,29 @@ public class ActionBar extends FrameLayout {
         setBackground(null);
     }
 
+    private AuroraLights auroraLights;
+
+    /**
+     * Aurora Motion: draws the drifting header lights behind the bar's content
+     * while the bar has the theme's own header colour (not a chat theme's, and
+     * not in selection mode).
+     */
+    public void setAuroraLights(boolean enabled) {
+        auroraLights = enabled ? new AuroraLights() : null;
+        invalidate();
+    }
+
+    private AuroraChatStage auroraStage;
+
+    /**
+     * Aurora Flow: the bar shows its slice of the chat's light (the stage the
+     * chat background also draws), so header and messages share one surface.
+     */
+    public void setAuroraStage(AuroraChatStage stage) {
+        auroraStage = stage;
+        invalidate();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
@@ -1890,7 +1925,164 @@ public class ActionBar extends FrameLayout {
             blurScrimPaint.setColor(actionBarColor);
             contentView.drawBlurRect(canvas, getY(), rectTmp, blurScrimPaint, true);
         }
+        final boolean chatsHeader = auroraChatsHeader != null && AuroraTheme.isActive();
+        if (chatsHeader && auroraGlassAlpha > 0f) {
+            int rowBottom = (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0) + getCurrentActionBarHeight();
+            auroraChatsHeader.drawHero(canvas, getMeasuredWidth(), rowBottom + auroraPin, getMeasuredHeight(), auroraGlassAlpha);
+        }
+        // While the chat list folds its header, the button row stays where it is.
+        final boolean pinned = auroraPin != 0f;
+        if (pinned) {
+            canvas.save();
+            canvas.translate(0, auroraPin);
+        }
+        if (auroraStage != null && !isActionModeShowed() && auroraStage.isEnabled()) {
+            View parent = (View) getParent();
+            int stageHeight = parent != null && parent.getMeasuredHeight() > 0 ? parent.getMeasuredHeight() : getMeasuredHeight();
+            canvas.save();
+            canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            auroraStage.draw(canvas, this, getY(), getMeasuredHeight(), getMeasuredWidth(), stageHeight);
+            canvas.restore();
+            drawAuroraGlass(canvas, 1f);
+        } else if (auroraLights != null && actionBarColor == AuroraTheme.HEADER_BASE && !isActionModeShowed() && AuroraTheme.isActive()) {
+            if (auroraLights.draw(canvas, 0, 0, getMeasuredWidth(), getMeasuredHeight(), 255)) {
+                postInvalidateDelayed(AuroraLights.FRAME_DELAY_MS);
+            }
+            drawAuroraGlass(canvas, 1f);
+        } else if (auroraGlassAlpha > 0f && !isActionModeShowed() && AuroraTheme.isActive()) {
+            drawAuroraGlass(canvas, auroraGlassAlpha);
+        }
+        if (chatsHeader && auroraGlassAlpha > 0f && !isActionModeShowed()) {
+            drawAuroraSearchPill(canvas, auroraGlassAlpha);
+        }
         super.dispatchDraw(canvas);
+        if (pinned) {
+            canvas.restore();
+        }
+    }
+
+    private AuroraChatsHeader auroraChatsHeader;
+    private float auroraPin;
+
+    /**
+     * Aurora Flow: the chat list's search pill and folding greeting, or null.
+     * The bar's {@link #setExtraHeight extra height} holds the greeting.
+     */
+    public void setAuroraChatsHeader(AuroraChatsHeader header) {
+        if (auroraChatsHeader != header) {
+            auroraChatsHeader = header;
+            if (header != null) {
+                header.setPin(auroraPin);
+            }
+            invalidate();
+        }
+    }
+
+    /**
+     * Draws and lays out touches for the button row {@code pin} px lower than
+     * laid out, so the row stays put while the chat list slides the bar up to
+     * fold its greeting.
+     */
+    public void setAuroraPin(float pin) {
+        if (auroraPin != pin) {
+            auroraPin = pin;
+            if (auroraChatsHeader != null) {
+                auroraChatsHeader.setPin(pin);
+            }
+            invalidate();
+        }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (auroraChatsHeader != null && AuroraTheme.isActive() && auroraGlassAlpha > 0.5f && !isActionModeShowed() && auroraChatsHeader.onTouchEvent(ev)) {
+            return true;
+        }
+        if (auroraPin != 0f) {
+            ev.offsetLocation(0, -auroraPin);
+            boolean result = super.dispatchTouchEvent(ev);
+            ev.offsetLocation(0, auroraPin);
+            return result;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private void drawAuroraSearchPill(Canvas canvas, float alpha) {
+        ActionBarMenuItem searchItem = null;
+        if (menu != null) {
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View child = menu.getChildAt(i);
+                if (child instanceof ActionBarMenuItem && ((ActionBarMenuItem) child).isSearchField()) {
+                    searchItem = (ActionBarMenuItem) child;
+                    break;
+                }
+            }
+        }
+        if (!isSearchFieldVisible && (searchItem == null || searchItem.getVisibility() != VISIBLE)) {
+            auroraChatsHeader.drawPill(canvas, 0, 0, 0, false, null, 0f);
+            return;
+        }
+        final float circle = AndroidUtilities.dp(20);
+        final float gap = AndroidUtilities.dp(8);
+        float left = AndroidUtilities.dp(16);
+        if (backButtonImageView != null && backButtonImageView.getVisibility() == VISIBLE) {
+            left = backButtonImageView.getX() + backButtonImageView.getWidth() / 2f + circle + gap;
+        }
+        float right = getMeasuredWidth() - AndroidUtilities.dp(16);
+        if (!isSearchFieldVisible && menu != null && menu.getVisibility() == VISIBLE) {
+            // Up to the first round button on the right (the avatar, or proxy and lock).
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View child = menu.getChildAt(i);
+                if (child instanceof ActionBarMenuItem && child.getVisibility() == VISIBLE && child.getWidth() > 0) {
+                    right = menu.getX() + child.getX() + child.getWidth() / 2f - circle - gap;
+                    break;
+                }
+            }
+        }
+        String status = titleOverlayShown && titleTextView[0] != null && titleTextView[0].getText() != null ? titleTextView[0].getText().toString() : null;
+        int rowTop = occupyStatusBar ? AndroidUtilities.statusBarHeight : 0;
+        auroraChatsHeader.drawPill(canvas, left, right, rowTop + getCurrentActionBarHeight() / 2f, isSearchFieldVisible, status, alpha);
+    }
+
+    private float auroraGlassAlpha;
+
+    /**
+     * Aurora Motion: draws the glass circles behind the header's round buttons
+     * without the lights, for screens that paint the aurora themselves (the
+     * chat list). {@code alpha} 0 turns them off.
+     */
+    public void setAuroraGlassAlpha(float alpha) {
+        if (auroraGlassAlpha != alpha) {
+            auroraGlassAlpha = alpha;
+            invalidate();
+        }
+    }
+
+    private void drawAuroraGlass(Canvas canvas, float alpha) {
+        // The design's glass back (or menu) button.
+        if (backButtonImageView != null && backButtonImageView.getVisibility() == VISIBLE && backButtonImageView.getAlpha() > 0f) {
+            AuroraTheme.drawGlassCircle(canvas,
+                    backButtonImageView.getX() + backButtonImageView.getWidth() / 2f,
+                    backButtonImageView.getY() + backButtonImageView.getHeight() / 2f,
+                    AndroidUtilities.dp(20), backButtonImageView.getAlpha() * alpha);
+        }
+        // And glass circles behind the round header buttons (call, search, more).
+        if (menu != null && menu.getVisibility() == VISIBLE && menu.getAlpha() > 0f && !isSearchFieldVisible) {
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View child = menu.getChildAt(i);
+                if (!(child instanceof ActionBarMenuItem) || child.getVisibility() != VISIBLE || child.getAlpha() <= 0f || child.getWidth() <= 0) {
+                    continue;
+                }
+                ActionBarMenuItem item = (ActionBarMenuItem) child;
+                if (item.isSearchField() && isSearchFieldVisible || item.getIconView() == null || item.getIconView().getVisibility() != VISIBLE) {
+                    continue;
+                }
+                AuroraTheme.drawGlassCircle(canvas,
+                        menu.getX() + child.getX() + child.getWidth() / 2f,
+                        menu.getY() + child.getY() + child.getHeight() / 2f,
+                        AndroidUtilities.dp(20), child.getAlpha() * menu.getAlpha() * alpha);
+            }
+        }
     }
 
     public void setForceSkipTouches(boolean forceSkipTouches) {

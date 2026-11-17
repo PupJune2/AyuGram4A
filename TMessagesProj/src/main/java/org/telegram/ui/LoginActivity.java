@@ -47,6 +47,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.Layout;
 import android.text.Spannable;
+import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
@@ -94,6 +95,14 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
+import com.radolyn.ayugram.ui.aurora.AuroraHeadlineTextView;
+import com.radolyn.ayugram.ui.aurora.AuroraLoginBackground;
+import com.radolyn.ayugram.ui.aurora.AuroraLoginButton;
+import com.radolyn.ayugram.ui.aurora.AuroraLoginLayout;
+import com.radolyn.ayugram.ui.aurora.AuroraPasswordToggle;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+import com.radolyn.ayugram.ui.aurora.AuroraWelcomeView;
 
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
@@ -116,6 +125,7 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.SRPHelper;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.RequestDelegate;
@@ -292,6 +302,14 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     private AnimatorSet doneItemAnimation;
     private TransformableLoginButtonView floatingButtonIcon;
     private FrameLayout floatingButtonContainer;
+    private AuroraLoginBackground auroraBackground;
+    private AuroraLoginButton auroraLoginButton;
+    private TextView auroraFootnote;
+    private AuroraWelcomeView auroraWelcome;
+    // Telegram's updateColors() paints these grey; Aurora wants them lighter or dimmer.
+    private final ArrayList<TextView> auroraSubtitles = new ArrayList<>();
+    private final ArrayList<TextView> auroraNotes = new ArrayList<>();
+    private static final int AURORA_FOOTNOTE_BOTTOM_DP = 20;
     private VerticalPositionAutoAnimator floatingAutoAnimator;
     private RadialProgressView floatingProgressView;
     private int progressRequestId;
@@ -502,12 +520,15 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 if (isCustomKeyboardVisible() && measureKeyboardHeight() > AndroidUtilities.dp(20)) {
                     keyboardOffset -= measureKeyboardHeight();
                 }
+                // Aurora Motion: the footnote sits under the pill while the keyboard is down.
+                int auroraFootSpace = measureAuroraFootnote(widthMeasureSpec, measureKeyboardHeight() > AndroidUtilities.dp(20));
                 if (Bulletin.getVisibleBulletin() != null && Bulletin.getVisibleBulletin().isShowing()) {
                     super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-                    marginLayoutParams.bottomMargin = AndroidUtilities.dp(16) + Bulletin.getVisibleBulletin().getLayout().getMeasuredHeight() - AndroidUtilities.dp(10) + keyboardOffset;
+                    marginLayoutParams.bottomMargin = AndroidUtilities.dp(16) + Bulletin.getVisibleBulletin().getLayout().getMeasuredHeight() - AndroidUtilities.dp(10) + keyboardOffset + auroraFootSpace;
                 } else {
-                    marginLayoutParams.bottomMargin = AndroidUtilities.dp(16) + keyboardOffset;
+                    marginLayoutParams.bottomMargin = AndroidUtilities.dp(16) + keyboardOffset + auroraFootSpace;
                 }
+                applyAuroraInsets(auroraFootSpace);
 
                 int statusBarHeight = AndroidUtilities.isTablet() ? 0 : AndroidUtilities.statusBarHeight;
                 marginLayoutParams = (MarginLayoutParams) backButtonView.getLayoutParams();
@@ -539,6 +560,11 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             }
         });
         fragmentView = sizeNotifierFrameLayout;
+
+        if (AuroraTheme.isActive()) {
+            auroraBackground = new AuroraLoginBackground(context);
+            sizeNotifierFrameLayout.addView(auroraBackground, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
 
         ScrollView scrollView = new ScrollView(context) {
             @Override
@@ -609,6 +635,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         views[VIEW_CODE_EMAIL_SETUP] = new LoginActivityEmailCodeView(context, true);
         views[VIEW_CODE_EMAIL] = new LoginActivityEmailCodeView(context, false);
         views[VIEW_CODE_FRAGMENT_SMS] = new LoginActivitySmsView(context, AUTH_TYPE_FRAGMENT_SMS);
+        if (auroraBackground != null) {
+            applyAuroraPageLayouts(context);
+        }
 
         for (int a = 0; a < views.length; a++) {
             views[a].setVisibility(a == 0 ? View.VISIBLE : View.GONE);
@@ -660,8 +689,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 }
             }
         });
+        if (AuroraTheme.isActive()) {
+            // Aurora Motion: a light full-width "Continue" pill instead of the round button.
+            auroraLoginButton = new AuroraLoginButton(context, floatingButtonContainer, LocaleController.getString("Continue", R.string.Continue));
+            floatingButtonContainer.setOutlineProvider(null);
+        }
         floatingAutoAnimator = VerticalPositionAutoAnimator.attach(floatingButtonContainer);
-        sizeNotifierFrameLayout.addView(floatingButtonContainer, LayoutHelper.createFrame(56, 56, Gravity.RIGHT | Gravity.BOTTOM, 0, 0, 24, 16));
+        if (auroraLoginButton != null) {
+            sizeNotifierFrameLayout.addView(floatingButtonContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, AuroraLoginButton.HEIGHT_DP, Gravity.BOTTOM, 24, 0, 24, 16));
+        } else {
+            sizeNotifierFrameLayout.addView(floatingButtonContainer, LayoutHelper.createFrame(56, 56, Gravity.RIGHT | Gravity.BOTTOM, 0, 0, 24, 16));
+        }
         floatingButtonContainer.setOnClickListener(view -> onDoneButtonPressed());
         floatingAutoAnimator.addUpdateListener((animation, value, velocity) -> {
             if (phoneNumberConfirmView != null) {
@@ -696,12 +734,29 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         radialProgressView.setScaleY(0.1f);
         sizeNotifierFrameLayout.addView(radialProgressView, LayoutHelper.createFrame(32, 32, Gravity.RIGHT | Gravity.TOP, 0, 16, 16, 0));
 
+        if (auroraBackground != null) {
+            auroraBackground.setHeader(LocaleController.getString(R.string.exteraAppName), backButtonView, proxyButtonView, radialProgressView);
+
+            auroraFootnote = new TextView(context);
+            auroraFootnote.setText(LocaleController.formatString(R.string.AuroraLoginFootnote, LocaleController.getString(R.string.exteraAppName)));
+            auroraFootnote.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            auroraFootnote.setTextColor(AuroraLoginLayout.MUTED);
+            auroraFootnote.setLineSpacing(AndroidUtilities.dp(3), 1f);
+            auroraFootnote.setGravity(Gravity.CENTER);
+            sizeNotifierFrameLayout.addView(auroraFootnote, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 24, 0, 24, AURORA_FOOTNOTE_BOTTOM_DP));
+        }
+
         floatingButtonIcon = new TransformableLoginButtonView(context);
         floatingButtonIcon.setTransformType(TransformableLoginButtonView.TRANSFORM_OPEN_ARROW);
         floatingButtonIcon.setProgress(1f);
         floatingButtonIcon.setDrawBackground(false);
         floatingButtonContainer.setContentDescription(LocaleController.getString("Done", R.string.Done));
-        floatingButtonContainer.addView(floatingButtonIcon, LayoutHelper.createFrame(56, 56));
+        if (auroraLoginButton != null) {
+            // The pill draws its own label; the arrow stays detached but keeps its size for the code that reads it.
+            floatingButtonIcon.setLayoutParams(LayoutHelper.createFrame(56, 56));
+        } else {
+            floatingButtonContainer.addView(floatingButtonIcon, LayoutHelper.createFrame(56, 56));
+        }
 
         floatingProgressView = new RadialProgressView(context);
         floatingProgressView.setSize(AndroidUtilities.dp(22));
@@ -729,15 +784,16 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 backButtonView.setVisibility(v.needBackButton() || newAccount || activityMode == MODE_CHANGE_PHONE_NUMBER ? View.VISIBLE : View.GONE);
                 v.setVisibility(View.VISIBLE);
                 v.onShow();
+                onAuroraPageShown(a, false);
 
                 setCustomKeyboardVisible(v.hasCustomKeyboard(), false);
 
                 currentDoneType = DONE_TYPE_FLOATING;
                 boolean needFloatingButton = a == VIEW_PHONE_INPUT || a == VIEW_REGISTER ||
                         a == VIEW_PASSWORD || a == VIEW_NEW_PASSWORD_STAGE_1 || a == VIEW_NEW_PASSWORD_STAGE_2 ||
-                        a == VIEW_ADD_EMAIL;
+                        a == VIEW_ADD_EMAIL || auroraUsesPill(a);
                 showDoneButton(needFloatingButton, false);
-                if (a == VIEW_CODE_MESSAGE || a == VIEW_CODE_SMS || a == VIEW_CODE_FLASH_CALL || a == VIEW_CODE_CALL) {
+                if (!needFloatingButton && (a == VIEW_CODE_MESSAGE || a == VIEW_CODE_SMS || a == VIEW_CODE_FLASH_CALL || a == VIEW_CODE_CALL)) {
                     currentDoneType = DONE_TYPE_ACTION;
                 }
             } else {
@@ -758,8 +814,133 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         return fragmentView;
     }
 
+    /** The backdrop (with its top row) and the footnote fade in together after the intro. */
+    private void setAuroraChromeAlpha(float alpha) {
+        if (auroraBackground != null) {
+            auroraBackground.setAlpha(alpha);
+        }
+        if (auroraFootnote != null) {
+            auroraFootnote.setAlpha(alpha);
+        }
+    }
+
+    /** Turns one of Telegram's full-width bottom text buttons into a small link under the form. */
+    private static void auroraLinkUnderForm(TextView button) {
+        View container = (View) button.getParent();
+        AuroraLoginLayout.collapse(container, 4);
+        AuroraLoginLayout.styleLink(button);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) button.getLayoutParams();
+        lp.width = LayoutHelper.WRAP_CONTENT;
+        lp.height = LayoutHelper.WRAP_CONTENT;
+        // The link's own 6dp padding would push its text off the column.
+        lp.leftMargin = LocaleController.isRTL ? 0 : -AndroidUtilities.dp(6);
+        lp.rightMargin = LocaleController.isRTL ? -AndroidUtilities.dp(6) : 0;
+        button.setLayoutParams(lp);
+    }
+
+    /** Removes the flexible spacers Telegram put in a page, before Aurora adds its own. */
+    private static void removeSpaces(LinearLayout page) {
+        for (int i = page.getChildCount() - 1; i >= 0; i--) {
+            if (page.getChildAt(i) instanceof Space) {
+                page.removeViewAt(i);
+            }
+        }
+    }
+
+    /** Lays out the pages that aren't built for Aurora in their constructors. */
+    private void applyAuroraPageLayouts(Context context) {
+        ((LoginActivityPasswordView) views[VIEW_PASSWORD]).applyAuroraLayout(context);
+        ((LoginActivityRegisterView) views[VIEW_REGISTER]).applyAuroraLayout();
+        ((LoginActivityResetWaitView) views[VIEW_RESET_WAIT]).applyAuroraLayout();
+        ((LoginActivitySetupEmail) views[VIEW_ADD_EMAIL]).applyAuroraLayout();
+        ((LoginActivityEmailCodeView) views[VIEW_CODE_EMAIL_SETUP]).applyAuroraLayout();
+        ((LoginActivityEmailCodeView) views[VIEW_CODE_EMAIL]).applyAuroraLayout();
+        ((LoginActivityRecoverView) views[VIEW_RECOVER]).applyAuroraLayout();
+        ((LoginActivityNewPasswordView) views[VIEW_NEW_PASSWORD_STAGE_1]).applyAuroraLayout();
+        ((LoginActivityNewPasswordView) views[VIEW_NEW_PASSWORD_STAGE_2]).applyAuroraLayout();
+    }
+
     private boolean isCustomKeyboardForceDisabled() {
-        return AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y || AndroidUtilities.isTablet() || AndroidUtilities.isAccessibilityTouchExplorationEnabled();
+        // Aurora Motion uses the system keyboard, so the screen keeps the design's layout.
+        return auroraBackground != null || AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y || AndroidUtilities.isTablet() || AndroidUtilities.isAccessibilityTouchExplorationEnabled();
+    }
+
+    /**
+     * Aurora Motion shows the Continue pill on the code steps too ("Verify"),
+     * as in the design. The code still goes through by itself once complete.
+     */
+    private boolean auroraUsesPill(int page) {
+        if (auroraLoginButton == null) {
+            return false;
+        }
+        switch (page) {
+            case VIEW_PHONE_INPUT:
+            case VIEW_REGISTER:
+            case VIEW_PASSWORD:
+            case VIEW_NEW_PASSWORD_STAGE_1:
+            case VIEW_NEW_PASSWORD_STAGE_2:
+            case VIEW_ADD_EMAIL:
+            case VIEW_CODE_MESSAGE:
+            case VIEW_CODE_SMS:
+            case VIEW_CODE_CALL:
+            case VIEW_CODE_MISSED_CALL:
+            case VIEW_CODE_FRAGMENT_SMS:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static boolean isAuroraCodePage(int page) {
+        return page == VIEW_CODE_MESSAGE || page == VIEW_CODE_SMS || page == VIEW_CODE_CALL || page == VIEW_CODE_MISSED_CALL || page == VIEW_CODE_FRAGMENT_SMS;
+    }
+
+    /**
+     * Measures the footnote for the space it takes under the pill, or hides
+     * it while the keyboard is up.
+     *
+     * @return the room to keep free above the bottom edge for it
+     */
+    private int measureAuroraFootnote(int widthMeasureSpec, boolean keyboardVisible) {
+        if (auroraFootnote == null) {
+            return 0;
+        }
+        int visibility = keyboardVisible ? View.GONE : View.VISIBLE;
+        if (auroraFootnote.getVisibility() != visibility) {
+            auroraFootnote.setVisibility(visibility);
+        }
+        if (keyboardVisible) {
+            return 0;
+        }
+        int width = View.MeasureSpec.getSize(widthMeasureSpec) - AndroidUtilities.dp(48);
+        auroraFootnote.measure(View.MeasureSpec.makeMeasureSpec(Math.max(0, width), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        // The usual 16dp gap above the bottom edge then falls between the footnote and the pill.
+        return auroraFootnote.getMeasuredHeight() + AndroidUtilities.dp(AURORA_FOOTNOTE_BOTTOM_DP);
+    }
+
+    /**
+     * Keeps each page's form 16dp above the pill (or above the footnote on
+     * pages without it). The pages reach 16dp below the screen's bottom.
+     */
+    private void applyAuroraInsets(int footSpace) {
+        if (auroraBackground == null) {
+            return;
+        }
+        int pillSpace = AndroidUtilities.dp(16) + footSpace + AndroidUtilities.dp(AuroraLoginButton.HEIGHT_DP + 16);
+        int plainSpace = footSpace + AndroidUtilities.dp(16);
+        for (int a = 0; a < views.length; a++) {
+            SlideView view = views[a];
+            if (view == null) {
+                continue;
+            }
+            int bottom = AndroidUtilities.dp(16) + (auroraUsesPill(a) ? pillSpace : plainSpace);
+            if (view.getPaddingBottom() != bottom) {
+                view.setPadding(view.getPaddingLeft(), view.getPaddingTop(), view.getPaddingRight(), bottom);
+            }
+        }
+        if (auroraWelcome != null) {
+            auroraWelcome.setBottomInset(plainSpace);
+        }
     }
 
     private boolean isCustomKeyboardVisible() {
@@ -1005,6 +1186,11 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     @Override
     public boolean onBackPressed() {
+        if (auroraWelcome != null) {
+            // Signed in already: back leaves for the chats, like the pill.
+            auroraWelcome.open();
+            return false;
+        }
         if (currentViewNum == VIEW_PHONE_INPUT || activityMode == MODE_CHANGE_LOGIN_EMAIL && currentViewNum == VIEW_ADD_EMAIL) {
             for (int a = 0; a < views.length; a++) {
                 if (views[a] != null) {
@@ -1219,6 +1405,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         if (!show) {
                             if (floating) {
                                 floatingButtonContainer.setVisibility(View.GONE);
+                                if (auroraLoginButton != null) {
+                                    auroraLoginButton.setLoading(false, false);
+                                }
                             }
 
                             if (floating && floatingButtonIcon.getAlpha() != 1f) {
@@ -1293,6 +1482,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             });
             showDialog(builder.create());
         } else {
+            if (auroraLoginButton != null && views[currentViewNum] instanceof LoginActivitySmsView && ((LoginActivitySmsView) views[currentViewNum]).rejectIncompleteCode()) {
+                return;
+            }
             views[currentViewNum].onNextPressed(null);
         }
     }
@@ -1337,6 +1529,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
         if (doneItemAnimation != null) {
             doneItemAnimation.cancel();
+        }
+        if (floating && auroraLoginButton != null) {
+            auroraLoginButton.setLoading(show, animated);
         }
 
         if (animated) {
@@ -1481,7 +1676,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public void setPage(@ViewNumber int page, boolean animated, Bundle params, boolean back) {
         boolean needFloatingButton = page == VIEW_PHONE_INPUT || page == VIEW_REGISTER || page == VIEW_PASSWORD ||
-                page == VIEW_NEW_PASSWORD_STAGE_1 || page == VIEW_NEW_PASSWORD_STAGE_2 || page == VIEW_ADD_EMAIL;
+                page == VIEW_NEW_PASSWORD_STAGE_1 || page == VIEW_NEW_PASSWORD_STAGE_2 || page == VIEW_ADD_EMAIL ||
+                auroraUsesPill(page);
         if (page == currentViewNum) {
             animated = false;
         }
@@ -1540,6 +1736,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             pagesAnimation.start();
 
             setCustomKeyboardVisible(newView.hasCustomKeyboard(), true);
+            onAuroraPageShown(page, true);
         } else {
             backButtonView.setVisibility(views[page].needBackButton() || newAccount ? View.VISIBLE : View.GONE);
             views[currentViewNum].setVisibility(View.GONE);
@@ -1551,7 +1748,99 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             views[page].onShow();
 
             setCustomKeyboardVisible(views[page].hasCustomKeyboard(), false);
+            onAuroraPageShown(page, false);
         }
+    }
+
+    /**
+     * Aurora Motion: moves the background lights and step dots to the page's
+     * step and replays the headline's word-by-word entrance.
+     */
+    private void onAuroraPageShown(int page, boolean animated) {
+        if (auroraBackground == null) {
+            return;
+        }
+        int step;
+        switch (page) {
+            case VIEW_PHONE_INPUT:
+                step = AuroraLoginBackground.STEP_PHONE;
+                break;
+            case VIEW_CODE_MESSAGE:
+            case VIEW_CODE_SMS:
+            case VIEW_CODE_FLASH_CALL:
+            case VIEW_CODE_CALL:
+            case VIEW_CODE_MISSED_CALL:
+            case VIEW_CODE_FRAGMENT_SMS:
+            case VIEW_ADD_EMAIL:
+            case VIEW_CODE_EMAIL_SETUP:
+            case VIEW_CODE_EMAIL:
+                step = AuroraLoginBackground.STEP_CODE;
+                break;
+            default:
+                step = AuroraLoginBackground.STEP_PASSWORD;
+                break;
+        }
+        auroraBackground.setStep(step, animated);
+        AuroraHeadlineTextView.revealIn(views[page]);
+
+        if (auroraLoginButton != null) {
+            // Continue / Verify / Unlock, as in the design.
+            String label;
+            if (isAuroraCodePage(page)) {
+                label = LocaleController.getString(R.string.AuroraVerify);
+            } else if (page == VIEW_PASSWORD) {
+                label = LocaleController.getString(R.string.Unlock);
+            } else {
+                label = LocaleController.getString(R.string.Continue);
+            }
+            auroraLoginButton.setText(label, animated);
+            floatingButtonContainer.setContentDescription(label);
+        }
+    }
+
+    /**
+     * Aurora Motion's last step: instead of jumping straight to the chats,
+     * show "You're in, Max" with the check and an "Open my chats" pill, as in
+     * the design. The sign-in is already complete at this point.
+     *
+     * @return false when it can't be shown, so the caller goes on as usual
+     */
+    private boolean showAuroraWelcome(TLRPC.User user, Runnable finish) {
+        if (auroraBackground == null || auroraWelcome != null || getParentActivity() == null || sizeNotifierFrameLayout == null || user == null) {
+            return false;
+        }
+        clearCurrentState();
+        View focus = fragmentView.findFocus();
+        if (focus != null) {
+            AndroidUtilities.hideKeyboard(focus);
+        }
+
+        String name = UserObject.getFirstName(user);
+        String title = LocaleController.formatString(R.string.AuroraYoureIn, name);
+        SpannableString spannable = new SpannableString(title);
+        int nameStart = title.lastIndexOf(name);
+        if (nameStart >= 0 && !TextUtils.isEmpty(name)) {
+            spannable.setSpan(new ForegroundColorSpan(AuroraHeadlineTextView.ACCENT), nameStart, nameStart + name.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        String subtitle = null;
+        if (!TextUtils.isEmpty(user.phone)) {
+            subtitle = LocaleController.formatString(R.string.AuroraSignedInAs, PhoneFormat.getInstance().format("+" + user.phone));
+        }
+
+        auroraWelcome = new AuroraWelcomeView(getParentActivity(), spannable, subtitle, LocaleController.getString(R.string.AuroraOpenMyChats), finish);
+        // On top of everything, so nothing under it takes a tap; the footnote stays visible below its pill.
+        sizeNotifierFrameLayout.addView(auroraWelcome, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+        // The last page and its controls step aside; the lights glide to their final spot.
+        View[] leaving = {slideViewsContainer, floatingButtonContainer, backButtonView, radialProgressView};
+        for (View view : leaving) {
+            view.setEnabled(false);
+            view.animate().alpha(0f).setDuration(250).setInterpolator(CubicBezierInterpolator.DEFAULT).start();
+        }
+        slideViewsContainer.animate().translationX(-AndroidUtilities.dp(36));
+        auroraBackground.setStep(AuroraLoginBackground.STEP_DONE, true);
+        auroraWelcome.show();
+        return true;
     }
 
     @Override
@@ -1645,7 +1934,11 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
         MediaDataController.getInstance(currentAccount).loadStickersByEmojiOrName(AndroidUtilities.STICKERS_PLACEHOLDER_PACK_NAME, false, true);
 
-        needFinishActivity(afterSignup, res.setup_password_required, res.otherwise_relogin_days);
+        boolean setupPassword = res.setup_password_required;
+        int relogin = res.otherwise_relogin_days;
+        if (!showAuroraWelcome(res.user, () -> needFinishActivity(afterSignup, setupPassword, relogin))) {
+            needFinishActivity(afterSignup, setupPassword, relogin);
+        }
     }
 
     private void fillNextCodeParams(Bundle params, TLRPC.TL_account_sentEmailCode res) {
@@ -1791,7 +2084,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             setOrientation(VERTICAL);
             setGravity(Gravity.CENTER);
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(activityMode == MODE_CHANGE_PHONE_NUMBER ? R.string.ChangePhoneNewNumber : R.string.YourNumber));
@@ -1870,7 +2163,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 @Override
                 protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
                     super.onFocusChanged(focused, direction, previouslyFocusedRect);
-                    phoneOutlineView.animateSelection(focused || phoneField.isFocused() ? 1f : 0f);
+                    if (auroraBackground != null) {
+                        // Aurora Motion: the code has its own pill.
+                        countryOutlineView.animateSelection(focused ? 1f : 0f);
+                    } else {
+                        phoneOutlineView.animateSelection(focused || phoneField.isFocused() ? 1f : 0f);
+                    }
 
                     if (focused) {
                         keyboardView.setEditText(this);
@@ -1890,6 +2188,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             codeField.setShowSoftInputOnFocus(!(hasCustomKeyboard() && !isCustomKeyboardForceDisabled()));
             codeField.setContentDescription(LocaleController.getString(R.string.LoginAccessibilityCountryCode));
             linearLayout.addView(codeField, LayoutHelper.createLinear(55, 36, -9, 0, 0, 0));
+            AuroraEnergy.pulseWhileTyping(codeField, AuroraEnergy.FIELD);
             codeField.addTextChangedListener(new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
@@ -2054,7 +2353,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 @Override
                 protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
                     super.onFocusChanged(focused, direction, previouslyFocusedRect);
-                    phoneOutlineView.animateSelection(focused || codeField.isFocused() ? 1f : 0f);
+                    phoneOutlineView.animateSelection(focused || auroraBackground == null && codeField.isFocused() ? 1f : 0f);
 
                     if (focused) {
                         keyboardView.setEditText(this);
@@ -2083,6 +2382,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             phoneField.setShowSoftInputOnFocus(!(hasCustomKeyboard() && !isCustomKeyboardForceDisabled()));
             phoneField.setContentDescription(LocaleController.getString(R.string.PhoneNumber));
             linearLayout.addView(phoneField, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36));
+            AuroraEnergy.pulseWhileTyping(phoneField, AuroraEnergy.FIELD);
             phoneField.addTextChangedListener(new TextWatcher() {
 
                 private int characterAction = -1;
@@ -2265,6 +2565,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 bottomSpacer.setMinimumHeight(AndroidUtilities.dp(bottomMargin));
                 addView(bottomSpacer, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
             }
+            if (auroraBackground != null) {
+                applyAuroraLayout(context, proxySettings);
+            }
 
             HashMap<String, String> languageMap = new HashMap<>();
 
@@ -2435,6 +2738,94 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             }, ConnectionsManager.RequestFlagWithoutLogin | ConnectionsManager.RequestFlagFailOnServerErrors);
         }
 
+        /**
+         * Aurora Motion: the design's phone step. A "Phone number" label, with
+         * the chosen country at its right, over the country code in a small
+         * pill ("+49 ▾") and the number in a wide one, at the bottom.
+         */
+        private void applyAuroraLayout(Context context, TextView proxySettings) {
+            // Telegram's room for the round button; the pill's is kept by the page padding.
+            for (int i = getChildCount() - 1; i >= 0; i--) {
+                if (getChildAt(i) instanceof Space) {
+                    removeViewAt(i);
+                }
+            }
+            int formIndex = indexOfChild(countryOutlineView);
+            removeView(countryOutlineView);
+            removeView(phoneOutlineView);
+            removeView(proxySettings);
+
+            LinearLayout labelRow = new LinearLayout(context);
+            labelRow.setOrientation(HORIZONTAL);
+            labelRow.setGravity(Gravity.CENTER_VERTICAL);
+            TextView label = new TextView(context);
+            label.setText(LocaleController.getString(R.string.PhoneNumber));
+            label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            label.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+            label.setSingleLine(true);
+            label.setTextColor(AuroraLoginLayout.SUBTITLE);
+            auroraSubtitles.add(label);
+
+            LinearLayout countryRow = (LinearLayout) countryButton.getParent();
+            countryRow.removeView(countryButton);
+            for (int i = 0; i < countryButton.getChildCount(); i++) {
+                TextView text = (TextView) countryButton.getChildAt(i);
+                text.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+                text.setPadding(0, AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4));
+                text.setGravity(AuroraLoginLayout.endGravity() | Gravity.CENTER_VERTICAL);
+                text.setTextColor(AuroraLoginLayout.MUTED);
+                auroraNotes.add(text);
+            }
+            countryButton.setOnClickListener(v -> countryOutlineView.performClick());
+            if (LocaleController.isRTL) {
+                labelRow.addView(countryButton, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 0, 0, 12, 0));
+                labelRow.addView(label, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL));
+            } else {
+                labelRow.addView(label, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL));
+                labelRow.addView(countryButton, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f, Gravity.CENTER_VERTICAL, 12, 0, 0, 0));
+            }
+
+            // "+49 ▾": the code stays editable, the rest of the pill opens the country list.
+            LinearLayout numberRow = (LinearLayout) phoneField.getParent();
+            numberRow.removeView(plusTextView);
+            numberRow.removeView(codeField);
+            codeDividerView.setVisibility(GONE);
+            Typeface medium = AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM);
+            plusTextView.setTypeface(medium);
+            codeField.setTypeface(medium);
+            codeField.setPadding(AndroidUtilities.dp(1), 0, 0, 0);
+            codeField.setMinWidth(AndroidUtilities.dp(14));
+            countryRow.addView(plusTextView, 0, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 16, 0, 0, 0));
+            countryRow.addView(codeField, 1, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 36, Gravity.CENTER_VERTICAL));
+            chevronRight.setRotation(90);
+            chevronRight.setLayoutParams(LayoutHelper.createLinear(18, 18, Gravity.CENTER_VERTICAL, 4, 0, 12, 0));
+            countryOutlineView.setForceUseCenter(false);
+            countryOutlineView.setText("");
+            countryOutlineView.setPadding(0, 0, 0, 0);
+
+            phoneOutlineView.setText("");
+            phoneOutlineView.setPadding(0, 0, 0, 0);
+            numberRow.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 20, 0, 16, 0));
+            phoneField.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
+
+            LinearLayout pillRow = new LinearLayout(context);
+            pillRow.setOrientation(HORIZONTAL);
+            pillRow.addView(countryOutlineView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
+            pillRow.addView(phoneOutlineView, LayoutHelper.createLinear(0, LayoutHelper.MATCH_PARENT, 1f, 10, 0, 0, 0));
+
+            addView(labelRow, formIndex);
+            AuroraLoginLayout.placeRow(labelRow, -1, 0);
+            addView(pillRow, formIndex + 1);
+            AuroraLoginLayout.placeRow(pillRow, 58, 10);
+
+            // AyuGram's proxy button, as a small link under the number.
+            AuroraLoginLayout.styleLink(proxySettings);
+            addView(proxySettings, formIndex + 2, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, AuroraLoginLayout.startGravity(), 0, 8, 0, 0));
+
+            AuroraLoginLayout.arrange(this, titleView, subtitleView, labelRow);
+            auroraSubtitles.add(subtitleView);
+        }
+
         @Override
         public void updateColors() {
             titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -2579,7 +2970,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             CharSequence prevText = countryButton.getCurrentView().getText();
             countryButton.setText(cs, !(TextUtils.isEmpty(cs) && TextUtils.isEmpty(prevText)) && !Objects.equals(prevText, cs));
-            countryOutlineView.animateSelection(cs != null ? 1f : 0f);
+            if (auroraBackground == null) {
+                countryOutlineView.animateSelection(cs != null ? 1f : 0f);
+            }
         }
 
         private void setCountry(HashMap<String, String> languageMap, String country) {
@@ -3149,15 +3542,20 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         codeField.clearFocus();
                         phoneField.clearFocus();
                     } else {
+                        // Aurora Motion: the field is ready, but the keyboard waits for a tap so the screen shows whole.
                         if (codeField.length() != 0) {
                             phoneField.requestFocus();
                             if (!numberFilled) {
                                 phoneField.setSelection(phoneField.length());
                             }
-                            showKeyboard(phoneField);
+                            if (auroraBackground == null) {
+                                showKeyboard(phoneField);
+                            }
                         } else {
                             codeField.requestFocus();
-                            showKeyboard(codeField);
+                            if (auroraBackground == null) {
+                                showKeyboard(codeField);
+                            }
                         }
                     }
                 }
@@ -3285,7 +3683,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             confirmTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             confirmTextView.setLineSpacing(AndroidUtilities.dp(2), 1.0f);
 
-            titleTextView = new TextView(context);
+            titleTextView = new AuroraHeadlineTextView(context);
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleTextView.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
@@ -3703,6 +4101,92 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     }
                 });
             }
+            if (auroraBackground != null) {
+                applyAuroraLayout(context);
+            }
+        }
+
+        /**
+         * Aurora Motion: the design's code step. The headline and where the
+         * code went at the top; big boxes at the bottom with "Wrong number?"
+         * and the resend timer under them.
+         */
+        private void applyAuroraLayout(Context context) {
+            if (currentType == AUTH_TYPE_FLASH_CALL) {
+                // This one waits for a call and has no form: Telegram's centred column, restyled.
+                AuroraLoginLayout.hide((View) blueImageView.getParent());
+                AuroraLoginLayout.restyle(this, titleTextView, confirmTextView);
+                auroraSubtitles.add(confirmTextView);
+                return;
+            }
+            boolean missedCall = currentType == AUTH_TYPE_MISSED_CALL;
+            AuroraLoginLayout.hide(missedCall ? (View) missedCallArrowIcon.getParent() : (View) blueImageView.getParent());
+            TextView subtitle = missedCall ? (TextView) getChildAt(indexOfChild(titleTextView) + 1) : confirmTextView;
+            View form = missedCall ? (View) codeFieldContainer.getParent() : codeFieldContainer;
+            if (!missedCall) {
+                codeFieldContainer.auroraWide = true;
+                AuroraLoginLayout.placeRow(codeFieldContainer, 62, 0);
+            }
+            AuroraLoginLayout.arrange(this, titleTextView, subtitle, form);
+            auroraSubtitles.add(subtitle);
+            if (missedCall) {
+                // "Enter the last digits": a small note under the code.
+                AuroraLoginLayout.styleNote(missedCallDescriptionSubtitle);
+                missedCallDescriptionSubtitle.setGravity(AuroraLoginLayout.startGravity());
+                AuroraLoginLayout.placeRow(missedCallDescriptionSubtitle, -1, 8);
+            }
+
+            if (currentType == AUTH_TYPE_FRAGMENT_SMS) {
+                // The "Open Fragment" button goes right under the boxes.
+                AuroraLoginLayout.collapse(bottomContainer, 16);
+                return;
+            }
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            if (activityMode == MODE_LOGIN) {
+                TextView wrongNumber = AuroraLoginLayout.createLink(context, LocaleController.getString(R.string.WrongNumber));
+                wrongNumber.setOnClickListener(v -> {
+                    if (radialProgressView.getTag() != null || nextPressed) {
+                        return;
+                    }
+                    onBackPressed(true);
+                    setPage(VIEW_PHONE_INPUT, true, null, true);
+                });
+                row.addView(wrongNumber, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, -6, 0, 12, 0));
+            }
+            row.addView(new Space(context), LayoutHelper.createLinear(0, 1, 1f));
+            bottomContainer.removeView(errorViewSwitcher);
+            row.addView(errorViewSwitcher, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_VERTICAL, 0, 0, -6, 0));
+            for (TextView text : new TextView[]{timeText, problemText, wrongCode}) {
+                AuroraLoginLayout.styleNote(text);
+                text.setGravity(AuroraLoginLayout.endGravity() | Gravity.CENTER_VERTICAL);
+                if (text.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                    FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) text.getLayoutParams();
+                    lp.width = LayoutHelper.WRAP_CONTENT;
+                    lp.gravity = AuroraLoginLayout.endGravity() | Gravity.CENTER_VERTICAL;
+                    text.setLayoutParams(lp);
+                }
+            }
+            int index = indexOfChild(bottomContainer);
+            removeView(bottomContainer);
+            addView(row, index);
+            AuroraLoginLayout.placeRow(row, -1, 8);
+        }
+
+        /**
+         * Aurora Motion's Verify pill: an unfinished code shakes the boxes
+         * instead of being sent.
+         */
+        boolean rejectIncompleteCode() {
+            if (codeFieldContainer == null || codeFieldContainer.codeField == null || codeFieldContainer.getVisibility() != VISIBLE) {
+                return false;
+            }
+            if (codeFieldContainer.getCode().length() >= codeFieldContainer.codeField.length) {
+                return false;
+            }
+            onFieldError(codeFieldContainer, false);
+            return true;
         }
 
         @Override
@@ -3818,7 +4302,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
 
         private void tryShowProgress(int reqId, boolean animate) {
-            if (starsToDotsDrawable != null) {
+            // Aurora Motion hides the phone picture; the pill shows the progress instead.
+            if (starsToDotsDrawable != null && auroraBackground == null) {
                 if (isDotsAnimationVisible) {
                     return;
                 }
@@ -3849,7 +4334,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
 
         private void tryHideProgress(boolean cancel, boolean animate) {
-            if (starsToDotsDrawable != null) {
+            if (starsToDotsDrawable != null && auroraBackground == null) {
                 if (!isDotsAnimationVisible) {
                     return;
                 }
@@ -4740,6 +5225,26 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public class LoginActivityPasswordView extends SlideView {
 
+        /**
+         * Aurora Motion: the design's password step. The field is a pill with
+         * a show/hide eye; "Forgot password?" is a small link under it.
+         */
+        void applyAuroraLayout(Context context) {
+            AuroraLoginLayout.hide((View) lockImageView.getParent());
+            AuroraLoginLayout.arrange(this, titleView, confirmTextView, outlineCodeField);
+            auroraSubtitles.add(confirmTextView);
+            AuroraLoginLayout.placeRow(outlineCodeField, -1, 0);
+
+            AuroraPasswordToggle toggle = new AuroraPasswordToggle(context, codeField, LocaleController.getString(R.string.TwoStepVerificationShowPassword), LocaleController.getString(R.string.AuroraHidePassword));
+            outlineCodeField.addView(toggle, LayoutHelper.createFrame(AuroraPasswordToggle.SIZE_DP, AuroraPasswordToggle.SIZE_DP, AuroraLoginLayout.endGravity() | Gravity.CENTER_VERTICAL, 6, 0, 6, 0));
+            int vertical = AndroidUtilities.dp(16);
+            int edge = AndroidUtilities.dp(20);
+            int toggleRoom = AndroidUtilities.dp(AuroraPasswordToggle.SIZE_DP + 12);
+            codeField.setPadding(LocaleController.isRTL ? toggleRoom : edge, vertical, LocaleController.isRTL ? edge : toggleRoom, vertical);
+
+            auroraLinkUnderForm(cancelButton);
+        }
+
         private EditTextBoldCursor codeField;
         private TextView confirmTextView;
         private TextView cancelButton;
@@ -4769,7 +5274,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             lockFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(lockFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(R.string.YourPasswordHeader));
@@ -4787,6 +5292,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             outlineCodeField = new OutlineTextContainerView(context);
             outlineCodeField.setText(LocaleController.getString(R.string.EnterPassword));
             codeField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(codeField, AuroraEnergy.FIELD);
             codeField.setCursorSize(AndroidUtilities.dp(20));
             codeField.setCursorWidth(1.5f);
             codeField.setBackground(null);
@@ -5085,6 +5591,13 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public class LoginActivityResetWaitView extends SlideView {
 
+        /** Aurora Motion: the account-reset countdown keeps its layout, restyled. */
+        void applyAuroraLayout() {
+            AuroraLoginLayout.hide((View) waitImageView.getParent());
+            AuroraLoginLayout.restyle(this, titleView, confirmTextView);
+            auroraSubtitles.add(confirmTextView);
+        }
+
         private RLottieImageView waitImageView;
         private TextView titleView;
         private TextView confirmTextView;
@@ -5119,7 +5632,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             waitFrameLayout.setVisibility(AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet() ? GONE : VISIBLE);
             innerLinearLayout.addView(waitFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(R.string.ResetAccount));
@@ -5298,6 +5811,15 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     }
 
     public class LoginActivitySetupEmail extends SlideView {
+
+        /** Aurora Motion: the email address step, laid out like the phone step. */
+        void applyAuroraLayout() {
+            AuroraLoginLayout.hide((View) inboxImageView.getParent());
+            removeSpaces(this);
+            AuroraLoginLayout.arrange(this, titleView, subtitleView, emailOutlineView);
+            auroraSubtitles.add(subtitleView);
+            AuroraLoginLayout.placeRow(emailOutlineView, 58, 0);
+        }
         private OutlineTextContainerView emailOutlineView;
         private EditTextBoldCursor emailField;
 
@@ -5328,7 +5850,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             inboxFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(inboxFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(activityMode == MODE_CHANGE_LOGIN_EMAIL ? R.string.EnterNewEmail : R.string.AddEmailTitle));
@@ -5347,6 +5869,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             emailOutlineView.setText(LocaleController.getString(activityMode == MODE_CHANGE_LOGIN_EMAIL ? R.string.YourNewEmail : R.string.YourEmail));
 
             emailField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(emailField, AuroraEnergy.FIELD);
             emailField.setCursorSize(AndroidUtilities.dp(20));
             emailField.setCursorWidth(1.5f);
             emailField.setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -5627,6 +6150,19 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public class LoginActivityEmailCodeView extends SlideView {
 
+        /**
+         * Aurora Motion: the email code keeps Telegram's arrangement (its
+         * bottom holds several stacked options), with the design's headline
+         * and wide code boxes.
+         */
+        void applyAuroraLayout() {
+            AuroraLoginLayout.hide((View) inboxImageView.getParent());
+            AuroraLoginLayout.restyle(this, titleView, confirmTextView);
+            auroraSubtitles.add(confirmTextView);
+            codeFieldContainer.auroraWide = true;
+            AuroraLoginLayout.placeRow(codeFieldContainer, 62, 28);
+        }
+
         private CodeFieldContainer codeFieldContainer;
         private TextView titleView;
         private TextView confirmTextView;
@@ -5687,7 +6223,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             inboxFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(inboxFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(activityMode == MODE_CHANGE_LOGIN_EMAIL ? R.string.CheckYourNewEmail : setup ? R.string.VerificationCode : R.string.CheckYourEmail));
@@ -6448,6 +6984,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public class LoginActivityRecoverView extends SlideView {
 
+        /** Aurora Motion: the recovery code step, laid out like the code step. */
+        void applyAuroraLayout() {
+            AuroraLoginLayout.hide((View) inboxImageView.getParent());
+            codeFieldContainer.auroraWide = true;
+            AuroraLoginLayout.placeRow(codeFieldContainer, 62, 0);
+            AuroraLoginLayout.arrange(this, titleView, confirmTextView, codeFieldContainer);
+            auroraSubtitles.add(confirmTextView);
+            auroraLinkUnderForm(troubleButton);
+            troubleButton.setGravity(AuroraLoginLayout.startGravity() | Gravity.CENTER_VERTICAL);
+        }
+
         private CodeFieldContainer codeFieldContainer;
         private TextView titleView;
         private TextView confirmTextView;
@@ -6481,7 +7028,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             inboxFrameLayout.setVisibility(AndroidUtilities.isSmallScreen() || (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y && !AndroidUtilities.isTablet()) ? GONE : VISIBLE);
             addView(inboxFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
 
-            titleView = new TextView(context);
+            titleView = new AuroraHeadlineTextView(context);
             titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleView.setText(LocaleController.getString(R.string.EnterCode));
@@ -6746,6 +7293,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
     public class LoginActivityNewPasswordView extends SlideView {
 
+        /** Aurora Motion: new password and hint, laid out like the password step. */
+        void applyAuroraLayout() {
+            View first = outlineFields[0];
+            AuroraLoginLayout.arrange(this, titleTextView, confirmTextView, first);
+            auroraSubtitles.add(confirmTextView);
+            for (OutlineTextContainerView field : outlineFields) {
+                AuroraLoginLayout.placeRow(field, -1, field == first ? 0 : 16);
+            }
+            auroraLinkUnderForm(cancelButton);
+        }
+
         private OutlineTextContainerView[] outlineFields;
         private EditTextBoldCursor[] codeField;
         private TextView titleTextView;
@@ -6772,7 +7330,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             codeField = new EditTextBoldCursor[stage == 1 ? 1 : 2];
             outlineFields = new OutlineTextContainerView[codeField.length];
 
-            titleTextView = new TextView(context);
+            titleTextView = new AuroraHeadlineTextView(context);
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
             titleTextView.setLineSpacing(AndroidUtilities.dp(2), 1.0f);
@@ -6792,6 +7350,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 outlineField.setText(LocaleController.getString(stage == 0 ? a == 0 ? R.string.PleaseEnterNewFirstPasswordHint : R.string.PleaseEnterNewSecondPasswordHint : R.string.PasswordHintPlaceholder));
 
                 codeField[a] = new EditTextBoldCursor(context);
+                AuroraEnergy.pulseWhileTyping(codeField[a], AuroraEnergy.FIELD);
                 codeField[a].setCursorSize(AndroidUtilities.dp(20));
                 codeField[a].setCursorWidth(1.5f);
                 codeField[a].setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -7113,6 +7672,38 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
     }
 
     public class LoginActivityRegisterView extends SlideView implements ImageUpdater.ImageUpdaterDelegate {
+
+        /**
+         * Aurora Motion: sign-up in the same style as the design's steps. The
+         * headline on top; the photo, the name pills and the terms at the
+         * bottom, above the Continue pill.
+         */
+        void applyAuroraLayout() {
+            View avatarContainer = (View) avatarImage.getParent();
+            removeView(avatarContainer);
+            addView(avatarContainer, indexOfChild(editTextContainer), LayoutHelper.createLinear(78, 78, AuroraLoginLayout.startGravity(), AuroraLoginLayout.SIDE_DP, 0, AuroraLoginLayout.SIDE_DP, 18));
+            AuroraLoginLayout.arrange(this, titleTextView, descriptionTextView, avatarContainer);
+            auroraSubtitles.add(descriptionTextView);
+
+            // The name pills have 8dp margins of their own inside the container.
+            LinearLayout.LayoutParams fields = (LinearLayout.LayoutParams) editTextContainer.getLayoutParams();
+            fields.leftMargin = fields.rightMargin = AndroidUtilities.dp(AuroraLoginLayout.SIDE_DP - 8);
+            fields.topMargin = 0;
+            editTextContainer.setLayoutParams(fields);
+
+            AuroraLoginLayout.styleLink(wrongNumber);
+
+            View privacyLayout = (View) privacyView.getParent();
+            AuroraLoginLayout.collapse(privacyLayout, 12);
+            FrameLayout.LayoutParams privacy = (FrameLayout.LayoutParams) privacyView.getLayoutParams();
+            privacy.width = LayoutHelper.MATCH_PARENT;
+            privacy.height = LayoutHelper.WRAP_CONTENT;
+            privacy.leftMargin = privacy.rightMargin = 0;
+            privacyView.setLayoutParams(privacy);
+            privacyView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            privacyView.setGravity(AuroraLoginLayout.startGravity());
+            privacyView.setLineSpacing(AndroidUtilities.dp(3), 1f);
+        }
         private OutlineTextContainerView firstNameOutlineView, lastNameOutlineView;
 
         private EditTextBoldCursor firstNameField;
@@ -7343,7 +7934,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             showAvatarProgress(false, false);
 
-            titleTextView = new TextView(context);
+            titleTextView = new AuroraHeadlineTextView(context);
             titleTextView.setText(LocaleController.getString(R.string.RegistrationProfileInfo));
             titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
             titleTextView.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
@@ -7365,6 +7956,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             firstNameOutlineView.setText(LocaleController.getString(R.string.FirstName));
 
             firstNameField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(firstNameField, AuroraEnergy.FIELD);
             firstNameField.setCursorSize(AndroidUtilities.dp(20));
             firstNameField.setCursorWidth(1.5f);
             firstNameField.setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -7390,6 +7982,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             lastNameOutlineView.setText(LocaleController.getString(R.string.LastName));
 
             lastNameField = new EditTextBoldCursor(context);
+            AuroraEnergy.pulseWhileTyping(lastNameField, AuroraEnergy.FIELD);
             lastNameField.setCursorSize(AndroidUtilities.dp(20));
             lastNameField.setCursorWidth(1.5f);
             lastNameField.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -7793,13 +8386,20 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     toY = getParentLayout().getView().getHeight() - floatingButtonIcon.getLayoutParams().height - ((ViewGroup.MarginLayoutParams)floatingButtonContainer.getLayoutParams()).bottomMargin -
                             (isCustomKeyboardVisible() ? AndroidUtilities.dp(CustomPhoneKeyboardView.KEYBOARD_HEIGHT_DP) : 0) - getParentLayout().getView().getPaddingTop() - getParentLayout().getView().getPaddingBottom();
 
+            // Aurora Motion: no morph into a round button; the pill fades in with the screen.
+            boolean auroraPill = auroraLoginButton != null;
             ValueAnimator animator = ValueAnimator.ofFloat(0, 1);
             animator.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationStart(Animator animation) {
-                    floatingButtonContainer.setVisibility(View.INVISIBLE);
                     keyboardLinearLayout.setAlpha(0);
                     fragmentView.setBackgroundColor(Color.TRANSPARENT);
+                    if (auroraPill) {
+                        floatingButtonContainer.setAlpha(0f);
+                        setAuroraChromeAlpha(0f);
+                        return;
+                    }
+                    floatingButtonContainer.setVisibility(View.INVISIBLE);
                     startMessagingButton.setVisibility(View.INVISIBLE);
 
                     FrameLayout frameLayout = (FrameLayout) fragmentView;
@@ -7812,6 +8412,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                     startMessagingButton.setVisibility(View.VISIBLE);
                     fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
                     floatingButtonContainer.setVisibility(View.VISIBLE);
+                    floatingButtonContainer.setAlpha(1f);
+                    setAuroraChromeAlpha(1f);
 
                     FrameLayout frameLayout = (FrameLayout) fragmentView;
                     frameLayout.removeView(transformButton);
@@ -7844,6 +8446,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 introView.setScaleX(sc);
                 introView.setScaleY(sc);
 
+                if (auroraPill) {
+                    floatingButtonContainer.setAlpha(val);
+                    setAuroraChromeAlpha(val);
+                    return;
+                }
+
                 transformParams.width = (int) (oldTransformWidth + (newTransformSize - oldTransformWidth) * val);
                 transformParams.height = (int) (oldTransformHeight + (newTransformSize - oldTransformHeight) * val);
                 transformButton.requestLayout();
@@ -7867,7 +8475,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
 
         Context context = getParentActivity();
-        Drawable drawable = CanvasUtils.createFabBackground();
+        Drawable drawable = auroraLoginButton != null ? auroraLoginButton.getBackground() : CanvasUtils.createFabBackground();
         floatingButtonContainer.setBackground(drawable);
 
         backButtonView.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -7882,10 +8490,16 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         floatingButtonIcon.setColor(Theme.getColor(Theme.key_chats_actionIcon));
         floatingButtonIcon.setBackgroundColor(Theme.getColor(Theme.key_chats_actionBackground));
 
-        floatingProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon));
+        floatingProgressView.setProgressColor(auroraLoginButton != null ? AuroraLoginButton.INK : Theme.getColor(Theme.key_chats_actionIcon));
 
         for (SlideView slideView : views) {
             slideView.updateColors();
+        }
+        for (TextView subtitle : auroraSubtitles) {
+            subtitle.setTextColor(AuroraLoginLayout.SUBTITLE);
+        }
+        for (TextView note : auroraNotes) {
+            note.setTextColor(AuroraLoginLayout.MUTED);
         }
 
         keyboardView.updateColors();
@@ -8053,8 +8667,14 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             int fragmentX = loc[0], fragmentY = loc[1];
 
             fabContainer.getLocationInWindow(loc);
-            popupFabContainer.setTranslationX(loc[0] - fragmentX);
-            popupFabContainer.setTranslationY(loc[1] - fragmentY);
+            float offsetX = 0, offsetY = 0;
+            if (AuroraTheme.isActive()) {
+                // Aurora Motion: the pill "narrows" into the round confirm button at its centre.
+                offsetX = (fabContainer.getWidth() - AndroidUtilities.dp(56)) / 2f;
+                offsetY = (fabContainer.getHeight() - AndroidUtilities.dp(56)) / 2f;
+            }
+            popupFabContainer.setTranslationX(loc[0] - fragmentX + offsetX);
+            popupFabContainer.setTranslationY(loc[1] - fragmentY + offsetY);
             requestLayout();
         }
 
@@ -8068,6 +8688,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             confirmTextView.setTextColor(Theme.getColor(Theme.key_changephoneinfo_image2));
             popupFabContainer.setBackground(CanvasUtils.createFabBackground());
             floatingProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon));
+            if (AuroraTheme.isActive()) {
+                fabTransform.setColor(AuroraLoginButton.INK);
+                fabTransform.setBackgroundColor(AuroraLoginButton.FILL);
+                popupFabContainer.setBackground(Theme.createCircleDrawable(AndroidUtilities.dp(56), AuroraLoginButton.FILL));
+                floatingProgressView.setProgressColor(AuroraLoginButton.INK);
+            }
         }
 
         @Override

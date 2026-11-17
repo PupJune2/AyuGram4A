@@ -46,6 +46,7 @@ import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 import com.exteragram.messenger.utils.FolderIcons;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -882,8 +883,17 @@ public class FilterTabsView extends FrameLayout {
             if (dt > 17) {
                 dt = 17;
             }
-            animationTime += dt / 200.0f;
-            setAnimationIdicatorProgress(interpolator.getInterpolation(animationTime));
+            if (auroraPill()) {
+                // Aurora Motion: the pill glides over .5s with a little spring
+                // (cubic-bezier(.3,.7,.3,1.2)); pages and colours keep their quick 200ms.
+                animationTime += dt / AURORA_PILL_MS;
+                float elapsed = Math.min(1f, animationTime) * AURORA_PILL_MS;
+                auroraPillProgress = AURORA_PILL_EASE.getInterpolation(Math.min(1f, animationTime));
+                setAnimationIdicatorProgress(interpolator.getInterpolation(Math.min(1f, elapsed / 200f)));
+            } else {
+                animationTime += dt / 200.0f;
+                setAnimationIdicatorProgress(interpolator.getInterpolation(animationTime));
+            }
             if (animationTime > 1.0f) {
                 animationTime = 1.0f;
             }
@@ -1183,6 +1193,7 @@ public class FilterTabsView extends FrameLayout {
 
         animationTime = 0;
         animatingIndicatorProgress = 0;
+        auroraPillProgress = 0;
         animatingIndicator = true;
         setEnabled(false);
 
@@ -1345,6 +1356,9 @@ public class FilterTabsView extends FrameLayout {
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child == listView && auroraPill()) {
+            drawAuroraTrack(canvas);
+        }
         boolean result = super.drawChild(canvas, child, drawingTime);
         if (child == listView) {
             final int height = getMeasuredHeight();
@@ -1369,13 +1383,14 @@ public class FilterTabsView extends FrameLayout {
                         int newX = positionToX.get(idx2);
                         int prevW = positionToWidth.get(idx1);
                         int newW = positionToWidth.get(idx2);
+                        float progress = animatingIndicator && auroraPill() ? auroraPillProgress : animatingIndicatorProgress;
                         if (additionalTabWidth != 0) {
-                            indicatorX = (int) (prevX + (newX - prevX) * animatingIndicatorProgress) + (FolderIcons.getPaddingTab() >> 1);
+                            indicatorX = (int) (prevX + (newX - prevX) * progress) + (FolderIcons.getPaddingTab() >> 1);
                         } else {
                             int x = positionToX.get(position);
-                            indicatorX = (int) (prevX + (newX - prevX) * animatingIndicatorProgress) - (x - holder.itemView.getLeft()) + (FolderIcons.getPaddingTab() >> 1);
+                            indicatorX = (int) (prevX + (newX - prevX) * progress) - (x - holder.itemView.getLeft()) + (FolderIcons.getPaddingTab() >> 1);
                         }
-                        indicatorWidth = (int) (prevW + (newW - prevW) * animatingIndicatorProgress);
+                        indicatorWidth = (int) (prevW + (newW - prevW) * progress);
                     }
                 }
             } else {
@@ -1950,8 +1965,64 @@ public class FilterTabsView extends FrameLayout {
 
     }
 
+    private static final float AURORA_PILL_MS = 500f;
+    private static final CubicBezierInterpolator AURORA_PILL_EASE = new CubicBezierInterpolator(0.3, 0.7, 0.3, 1.2);
+    private float auroraPillProgress;
+    private boolean auroraPillRim;
+    private Paint auroraTrackPaint;
+
+    /** Aurora Motion styles the pill tab style (exteraGram's default) like the design's segmented control. */
+    private boolean auroraPill() {
+        return ExteraConfig.tabStyle == 4 && AuroraTheme.isActive() && !isEditing;
+    }
+
+    /**
+     * The segmented control's track behind the tabs: white at 5% with an 8%
+     * rim, 3dp around the selected pill.
+     */
+    private void drawAuroraTrack(Canvas canvas) {
+        float left = Float.MAX_VALUE;
+        float right = -Float.MAX_VALUE;
+        for (int i = 0; i < listView.getChildCount(); i++) {
+            View view = listView.getChildAt(i);
+            if (!(view instanceof TabView)) {
+                continue;
+            }
+            TabView tabView = (TabView) view;
+            float textLeft = listView.getX() + tabView.getX() + (tabView.getMeasuredWidth() - tabView.tabWidth) / 2f;
+            left = Math.min(left, textLeft - AndroidUtilities.dp(15));
+            right = Math.max(right, textLeft + tabView.tabWidth + AndroidUtilities.dp(15));
+        }
+        if (left >= right) {
+            return;
+        }
+        if (auroraTrackPaint == null) {
+            auroraTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            auroraTrackPaint.setStrokeWidth(Math.max(1, AndroidUtilities.dp(1)));
+        }
+        float cy = getMeasuredHeight() / 2f;
+        float half = AndroidUtilities.dp(21);
+        float inset = auroraTrackPaint.getStrokeWidth() / 2f;
+        AndroidUtilities.rectTmp.set(Math.max(left, inset), cy - half, Math.min(right, getMeasuredWidth() - inset), cy + half);
+        int alpha = (int) (255 * listView.getAlpha());
+        auroraTrackPaint.setStyle(Paint.Style.FILL);
+        auroraTrackPaint.setColor(0x0dffffff);
+        auroraTrackPaint.setAlpha(0x0d * alpha / 255);
+        canvas.drawRoundRect(AndroidUtilities.rectTmp, half, half, auroraTrackPaint);
+        auroraTrackPaint.setStyle(Paint.Style.STROKE);
+        auroraTrackPaint.setColor(0x14ffffff);
+        auroraTrackPaint.setAlpha(0x14 * alpha / 255);
+        canvas.drawRoundRect(AndroidUtilities.rectTmp, half, half, auroraTrackPaint);
+    }
+
     public void updateSelector() {
         selectorDrawable.setColor(ColorUtils.setAlphaComponent(Theme.getColor(tabLineColorKey), ExteraConfig.tabStyle >= 3 ? 0x2F : 0xFF));
+        // Aurora Motion: the selected pill gets a lavender rim, rgba(196,181,253,.35).
+        boolean rim = auroraPill();
+        if (rim != auroraPillRim) {
+            auroraPillRim = rim;
+            selectorDrawable.setStroke(rim ? Math.max(1, AndroidUtilities.dp(1)) : 0, rim ? 0x59c4b5fd : 0);
+        }
         float rad = AndroidUtilities.dpf2(ExteraConfig.tabStyle == 3 ? 8 : ExteraConfig.tabStyle == 4 ? 30 : 3);
         if (ExteraConfig.tabStyle == 1 || ExteraConfig.tabStyle >= 3) {
             selectorDrawable.setCornerRadii(new float[]{rad, rad, rad, rad, rad, rad, rad, rad});

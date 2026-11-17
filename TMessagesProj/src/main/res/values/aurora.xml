@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <!-- Aurora Motion sign-in -->
+  <string name="AuroraLoginFootnote">%1$s talks to Telegram directly. No extra servers in between.</string>
+  <string name="AuroraVerify">Verify</string>
+  <string name="AuroraHidePassword">Hide password</string>
+  <string name="AuroraYoureIn">You’re in, %1$s</string>
+  <string name="AuroraSignedInAs">Signed in as %1$s</string>
+  <string name="AuroraOpenMyChats">Open my chats</string>
+  <!-- Aurora Motion chat list: the greeting title -->
+  <string name="AuroraHello">Hello %1$s</string>
+  <string name="AuroraStayInLoop">Stay in the loop</string>
+</resources>

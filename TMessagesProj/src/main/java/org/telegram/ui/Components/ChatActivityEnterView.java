@@ -112,6 +112,10 @@ import com.exteragram.messenger.utils.TranslatorUtils;
 import com.radolyn.ayugram.AyuConfig;
 import com.radolyn.ayugram.utils.AyuState;
 
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
@@ -2503,7 +2507,12 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                     }
                     prevColorType = colorType;
                     drawableColor = color;
-                    sendButtonDrawable.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelSend), PorterDuff.Mode.MULTIPLY));
+                    if (AuroraTheme.isActive()) {
+                        // Aurora Motion: a white arrow on the violet-to-blue circle.
+                        sendButtonDrawable.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
+                    } else {
+                        sendButtonDrawable.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelSend), PorterDuff.Mode.MULTIPLY));
+                    }
                     int c = getThemedColor(Theme.key_chat_messagePanelIcons);
                     inactinveSendButtonDrawable.setColorFilter(new PorterDuffColorFilter(Color.argb(0xb4, Color.red(c), Color.green(c), Color.blue(c)), PorterDuff.Mode.MULTIPLY));
                     sendButtonInverseDrawable.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelVoicePressed), PorterDuff.Mode.MULTIPLY));
@@ -2523,6 +2532,9 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                         inactinveSendButtonDrawable.setBounds(x, y, x + sendButtonDrawable.getIntrinsicWidth(), y + sendButtonDrawable.getIntrinsicHeight());
                         inactinveSendButtonDrawable.draw(canvas);
                     } else {
+                        if (AuroraTheme.isActive()) {
+                            AuroraTheme.drawSendCircle(canvas, getMeasuredWidth() / 2f, getMeasuredHeight() / 2f, AndroidUtilities.dp(20));
+                        }
                         sendButtonDrawable.setBounds(x, y, x + sendButtonDrawable.getIntrinsicWidth(), y + sendButtonDrawable.getIntrinsicHeight());
                         sendButtonDrawable.draw(canvas);
                     }
@@ -3442,6 +3454,16 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         int bottom = top + Theme.chat_composeShadowDrawable.getIntrinsicHeight();
 
         bottom += chatSearchExpandOffset;
+        if (auroraStage != null && auroraStage.isEnabled() && getParent() instanceof View) {
+            // Aurora Flow: the composer sits on the chat's light, the bottom light glowing behind the field.
+            View parent = (View) getParent();
+            canvas.save();
+            canvas.clipRect(0, bottom, getWidth(), getHeight());
+            auroraStage.draw(canvas, this, getY(), getHeight(), getWidth(), parent.getMeasuredHeight());
+            canvas.restore();
+            drawAuroraField(canvas);
+            return;
+        }
         if (allowBlur) {
             backgroundPaint.setColor(getThemedColor(Theme.key_chat_messagePanelBackground));
             if (SharedConfig.chatBlurEnabled() && sizeNotifierLayout != null) {
@@ -3455,6 +3477,67 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         }
         if (!ExteraConfig.disableDividers)
             canvas.drawLine(0, bottom, getWidth(), bottom, Theme.dividerPaint);
+        if (AuroraTheme.isActive()) {
+            drawAuroraField(canvas);
+        }
+    }
+
+    /** Aurora Flow: the chat's light, drawn behind the composer instead of its panel colour. */
+    public AuroraChatStage auroraStage;
+
+    private Paint auroraFieldFill;
+    private Paint auroraFieldStroke;
+    private boolean auroraHasText;
+    private float auroraRim;
+    private long auroraRimTime;
+
+    /**
+     * Aurora Motion: the message field sits in a softly filled pill (emoji,
+     * text and attach inside; the send button outside), like the design's composer.
+     */
+    private void drawAuroraField(Canvas canvas) {
+        if (messageEditTextContainer == null || textFieldContainer == null || textFieldContainer.getVisibility() != VISIBLE
+                || botWebViewButton != null && botWebViewButton.getVisibility() == VISIBLE) {
+            return;
+        }
+        if (auroraFieldFill == null) {
+            auroraFieldFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+            auroraFieldFill.setColor(0x14ffffff);
+            auroraFieldStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+            auroraFieldStroke.setStyle(Paint.Style.STROKE);
+            auroraFieldStroke.setStrokeWidth(Math.max(1, AndroidUtilities.dp(1)));
+            auroraFieldStroke.setColor(0x24ffffff);
+        }
+        float x = textFieldContainer.getX() + messageEditTextContainer.getX();
+        float y = textFieldContainer.getY() + messageEditTextContainer.getY();
+        float inset = AndroidUtilities.dp(5);
+        AndroidUtilities.rectTmp.set(x + AndroidUtilities.dp(6), y + inset, x + messageEditTextContainer.getWidth() - AndroidUtilities.dp(2), y + messageEditTextContainer.getHeight() - inset);
+        if (AndroidUtilities.rectTmp.height() <= 0 || AndroidUtilities.rectTmp.width() <= 0) {
+            return;
+        }
+        float radius = Math.min(AndroidUtilities.rectTmp.height() / 2f, AndroidUtilities.dp(22));
+        int alpha = (int) (255 * messageEditTextContainer.getAlpha() * textFieldContainer.getAlpha());
+        auroraFieldFill.setAlpha(alpha * 0x14 / 255);
+        // Rim: white 14% when empty, lavender rgba(196,181,253,.5) with text (.3s).
+        long now = SystemClock.elapsedRealtime();
+        float target = auroraHasText ? 1f : 0f;
+        if (auroraRim != target) {
+            if (!AuroraTheme.canAnimate()) {
+                auroraRim = target;
+            } else {
+                float step = auroraRimTime == 0 ? 16f / 300f : Math.min(1f, (now - auroraRimTime) / 300f);
+                auroraRim = target > auroraRim ? Math.min(target, auroraRim + step) : Math.max(target, auroraRim - step);
+            }
+            if (auroraRim != target) {
+                invalidate();
+            }
+        }
+        auroraRimTime = auroraRim != target ? now : 0;
+        int rim = ColorUtils.blendARGB(0x24ffffff, 0x80c4b5fd, auroraRim);
+        auroraFieldStroke.setColor(rim);
+        auroraFieldStroke.setAlpha(alpha * Color.alpha(rim) / 255);
+        canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFieldFill);
+        canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFieldStroke);
     }
 
     @Override
@@ -4195,6 +4278,10 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
                 if (innerTextChange == 1) {
                     return;
                 }
+                if (!ignoreTextChange && (before > 0 || count > 0)) {
+                    // Aurora Flow: the chat's light breathes a little with each keystroke.
+                    AuroraEnergy.pulse(AuroraEnergy.TYPE);
+                }
                 if (sendByEnter && !isPaste && editingMessageObject == null && count > before && charSequence.length() > 0 && charSequence.length() == start + count && charSequence.charAt(charSequence.length() - 1) == '\n') {
                     nextChangeIsSend = true;
                 }
@@ -4222,6 +4309,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
             @Override
             public void afterTextChanged(Editable editable) {
+                if (AuroraTheme.isActive() && (editable.length() > 0) != auroraHasText) {
+                    // The pill's rim turns lavender while there is text.
+                    auroraHasText = editable.length() > 0;
+                    invalidate();
+                }
                 if (ignorePrevTextChange) {
                     return;
                 }

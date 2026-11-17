@@ -28,6 +28,9 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
+
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Cells.ChatMessageCell;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AvatarsDrawable;
@@ -296,6 +299,8 @@ public class ReactionsLayoutInBubble {
         drawServiceShaderBackground = 0f;
     }
 
+    private static final CubicBezierInterpolator AURORA_POP_EASE = new CubicBezierInterpolator(0.3, 0.7, 0.3, 1.5);
+
     public void draw(Canvas canvas, float animationProgress, String drawOnlyReaction) {
         if (isEmpty && outButtons.isEmpty()) {
             return;
@@ -326,8 +331,19 @@ public class ReactionsLayoutInBubble {
             canvas.translate(x, y);
             float alpha = 1f;
             if (animationProgress != 1f && reactionButton.animationType == ANIMATION_TYPE_IN) {
-                float s = 0.5f + 0.5f * animationProgress;
-                alpha = animationProgress;
+                float s;
+                if (AuroraTheme.isActive()) {
+                    // amPop: scale 0 -> 1.25 (60%) -> 1, cubic-bezier(.3,.7,.3,1.5) per step.
+                    if (animationProgress < 0.6f) {
+                        s = 1.25f * AURORA_POP_EASE.getInterpolation(animationProgress / 0.6f);
+                    } else {
+                        s = 1.25f - 0.25f * AURORA_POP_EASE.getInterpolation((animationProgress - 0.6f) / 0.4f);
+                    }
+                    alpha = Math.min(1f, animationProgress * 4f);
+                } else {
+                    s = 0.5f + 0.5f * animationProgress;
+                    alpha = animationProgress;
+                }
                 canvas.scale(s, s, reactionButton.width / 2f, reactionButton.height / 2f);
             }
             reactionButton.draw(canvas, reactionButton.animationType == ANIMATION_TYPE_MOVE ? animationProgress : 1f, alpha, drawOnlyReaction != null);

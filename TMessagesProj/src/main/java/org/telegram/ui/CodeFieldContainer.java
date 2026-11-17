@@ -15,6 +15,9 @@ import android.widget.LinearLayout;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.ActionBar.Theme;
@@ -25,11 +28,14 @@ public class CodeFieldContainer extends LinearLayout {
 
     Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Paint auroraFillPaint;
     float strokeWidth;
     public boolean ignoreOnTextChange;
     public boolean isFocusSuppressed;
 
     public CodeNumberField[] codeField;
+    // Aurora Motion sign-in: boxes share the full width, 62dp tall, 10dp apart, with 26sp digits.
+    public boolean auroraWide;
 
     public CodeFieldContainer(Context context) {
         super(context);
@@ -67,7 +73,19 @@ public class CodeFieldContainer extends LinearLayout {
                     AndroidUtilities.rectTmp.inset(offset, offset);
                 }
 
-                canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(4), AndroidUtilities.dp(4), paint);
+                if (AuroraTheme.isActive()) {
+                    // Aurora Motion: softly filled, well-rounded boxes.
+                    if (auroraFillPaint == null) {
+                        auroraFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                        auroraFillPaint.setColor(0x14ffffff);
+                    }
+                    float radius = auroraWide ? AndroidUtilities.dp(20) : Math.min(AndroidUtilities.rectTmp.width(), AndroidUtilities.rectTmp.height()) * 0.32f;
+                    radius = Math.min(radius, Math.min(AndroidUtilities.rectTmp.width(), AndroidUtilities.rectTmp.height()) / 2f);
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFillPaint);
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, paint);
+                } else {
+                    canvas.drawRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.dp(4), AndroidUtilities.dp(4), paint);
+                }
             }
         }
         super.dispatchDraw(canvas);
@@ -169,7 +187,8 @@ public class CodeFieldContainer extends LinearLayout {
                 };
 
                 codeField[a].setImeOptions(EditorInfo.IME_ACTION_NEXT | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-                codeField[a].setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+                AuroraEnergy.pulseWhileTyping(codeField[a], AuroraEnergy.CODE_DIGIT);
+                codeField[a].setTextSize(TypedValue.COMPLEX_UNIT_DIP, auroraWide ? 26 : 20);
                 codeField[a].setMaxLines(1);
                 codeField[a].setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
                 codeField[a].setPadding(0, 0, 0, 0);
@@ -197,7 +216,11 @@ public class CodeFieldContainer extends LinearLayout {
                     height = 42;
                     gapSize = 7;
                 }
-                addView(codeField[a], LayoutHelper.createLinear(width, height, Gravity.CENTER_HORIZONTAL, 0, 0, a != length - 1 ? gapSize: 0, 0));
+                if (auroraWide) {
+                    addView(codeField[a], LayoutHelper.createLinear(0, LayoutHelper.MATCH_PARENT, 1f, 0, 0, a != length - 1 ? 10 : 0, 0));
+                } else {
+                    addView(codeField[a], LayoutHelper.createLinear(width, height, Gravity.CENTER_HORIZONTAL, 0, 0, a != length - 1 ? gapSize: 0, 0));
+                }
                 codeField[a].addTextChangedListener(new TextWatcher() {
 
                     @Override

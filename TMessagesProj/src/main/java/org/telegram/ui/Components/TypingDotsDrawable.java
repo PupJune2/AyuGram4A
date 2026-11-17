@@ -12,12 +12,15 @@ import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.os.SystemClock;
 import android.view.animation.DecelerateInterpolator;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.Theme;
+
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 public class TypingDotsDrawable extends StatusDrawable {
 
@@ -31,6 +34,7 @@ public class TypingDotsDrawable extends StatusDrawable {
     private DecelerateInterpolator decelerateInterpolator = new DecelerateInterpolator();
 
     private Paint currentPaint;
+    private long auroraStart;
 
     public TypingDotsDrawable(boolean createPaint) {
         if (createPaint) {
@@ -83,6 +87,7 @@ public class TypingDotsDrawable extends StatusDrawable {
     }
 
     public void start() {
+        auroraStart = 0;
         lastUpdateTime = System.currentTimeMillis();
         started = true;
         invalidateSelf();
@@ -99,6 +104,43 @@ public class TypingDotsDrawable extends StatusDrawable {
         started = false;
     }
 
+    /**
+     * Aurora Motion's typing dots: three 4dp dots that hop 4dp up and light
+     * up in turn (1.1 s loop, 150 ms apart, ease-in-out), instead of pulsing.
+     */
+    private void drawAurora(Canvas canvas, Paint paint, int y) {
+        long now = SystemClock.elapsedRealtime();
+        if (auroraStart == 0) {
+            auroraStart = now;
+        }
+        int baseAlpha = paint.getAlpha();
+        float radius = AndroidUtilities.dp(2);
+        boolean animate = started && AuroraTheme.canAnimate();
+        for (int a = 0; a < 3; a++) {
+            float lift = animate ? 0f : 1f;
+            if (animate) {
+                long t = now - auroraStart - a * 150L;
+                float phase = (float) (((t % 1100) + 1100) % 1100) / 1100f;
+                if (phase < 0.4f) {
+                    lift = CubicBezierInterpolator.EASE_BOTH.getInterpolation(phase / 0.4f);
+                } else if (phase < 0.8f) {
+                    lift = 1f - CubicBezierInterpolator.EASE_BOTH.getInterpolation((phase - 0.4f) / 0.4f);
+                }
+            }
+            paint.setAlpha((int) (baseAlpha * (0.4f + 0.6f * lift)));
+            canvas.drawCircle(AndroidUtilities.dp(3 + 6 * a), y - (animate ? AndroidUtilities.dp(4) * lift : 0), radius, paint);
+        }
+        paint.setAlpha(baseAlpha);
+        if (animate) {
+            // Like the pulse, hold still while a screen transition runs.
+            if (!NotificationCenter.getInstance(currentAccount).isAnimationInProgress()) {
+                invalidateSelf();
+            } else {
+                AndroidUtilities.runOnUIThread(this::invalidateSelf, 100);
+            }
+        }
+    }
+
     @Override
     public void draw(Canvas canvas) {
         int y;
@@ -113,6 +155,11 @@ public class TypingDotsDrawable extends StatusDrawable {
             paint.setAlpha(255);
         } else {
             paint = currentPaint;
+        }
+
+        if (AuroraTheme.isActive()) {
+            drawAurora(canvas, paint, y);
+            return;
         }
 
         canvas.drawCircle(AndroidUtilities.dp(3), y, scales[0] * AndroidUtilities.density, paint);

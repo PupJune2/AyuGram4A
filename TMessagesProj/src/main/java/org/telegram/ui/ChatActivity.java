@@ -119,9 +119,14 @@ import com.radolyn.ayugram.AyuUtils;
 import com.radolyn.ayugram.messages.AyuMessagesController;
 import com.radolyn.ayugram.proprietary.AyuHistoryHook;
 import com.radolyn.ayugram.ui.DummyView;
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
+import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.utils.AyuState;
 import com.radolyn.ayugram.utils.AyuGhostUtils;
 import com.radolyn.ayugram.ui.AyuMessageHistory;
+
+import com.radolyn.ayugram.ui.aurora.AuroraMessageMotion;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
@@ -203,6 +208,7 @@ import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.AnimatedFileDrawable;
 import org.telegram.ui.Components.AnimationProperties;
+import org.telegram.ui.Components.AvatarDrawable;
 import org.telegram.ui.Components.AttachBotIntroTopView;
 import org.telegram.ui.Components.AudioPlayerAlert;
 import org.telegram.ui.Components.AutoDeletePopupWrapper;
@@ -408,6 +414,8 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
     private ChatBigEmptyView bigEmptyView;
     private final ArrayList<View> actionModeViews = new ArrayList<>();
     private ChatAvatarContainer avatarContainer;
+    // Aurora Flow: the chat's light in the person's avatar colours, shared by the header and the background.
+    private AuroraChatStage auroraStage;
     private TextView bottomOverlayText;
     private NumberTextView selectedMessagesCountTextView;
     private RecyclerListView.OnItemClickListener mentionsOnItemClickListener;
@@ -2659,9 +2667,25 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         }
     }
 
+    /** Aurora Flow: the chat's light takes the avatar's colour, then its photo's colours once loaded. */
+    private void updateAuroraStagePalette() {
+        if (auroraStage == null) {
+            return;
+        }
+        boolean saved = currentUser != null && UserObject.isUserSelf(currentUser);
+        long id = currentUser != null ? currentUser.id : currentChat != null ? currentChat.id : dialog_id;
+        auroraStage.setColorIndex(AvatarDrawable.getColorIndex(id), saved);
+        if (!saved && !isTopic && avatarContainer != null && avatarContainer.getAvatarImageView() != null) {
+            auroraStage.setAvatar(avatarContainer.getAvatarImageView().getImageReceiver());
+        }
+    }
+
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        if (auroraStage != null) {
+            auroraStage.release();
+        }
         if (chatActivityEnterView != null) {
             chatActivityEnterView.onDestroy();
         }
@@ -4166,6 +4190,10 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             @Override
             protected void onChildPressed(View child, float x, float y, boolean pressed) {
                 super.onChildPressed(child, x, y, pressed);
+                if (child instanceof ChatMessageCell && ((ChatMessageCell) child).getCurrentMessagesGroup() == null) {
+                    // Aurora Motion: the bubble sinks a little under the finger.
+                    AuroraMessageMotion.press(child, pressed);
+                }
                 if (child instanceof ChatMessageCell) {
                     ChatMessageCell chatMessageCell = (ChatMessageCell) child;
                     MessageObject object = chatMessageCell.getMessageObject();
@@ -5244,6 +5272,9 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         chatListView.setClipToPadding(false);
         chatListView.setAnimateEmptyView(true, RecyclerListView.EMPTY_VIEW_ANIMATION_TYPE_ALPHA_SCALE);
         chatListView.setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY);
+        if (AuroraTheme.isActive() && !inPreviewMode) {
+            AuroraMessageMotion.riseInOnFirstLayout(chatListView);
+        }
         chatListViewPaddingTop = 0;
         invalidateChatListViewTopPadding();
         if (MessagesController.getGlobalMainSettings().getBoolean("view_animations", true)) {
@@ -7259,6 +7290,18 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             }
         };
         actionBar.setDrawBlurBackground(contentView);
+        actionBar.setAuroraLights(AuroraTheme.isActive());
+        if (AuroraTheme.isActive()) {
+            auroraStage = new AuroraChatStage();
+            // Only over the theme's own wallpaper: a chat theme or a wallpaper the user picked wins.
+            auroraStage.setCondition(() -> themeDelegate.getCurrentTheme() == null && themeDelegate.wallpaper == null
+                    && Theme.getActiveTheme() != null && Theme.getActiveTheme().overrideWallpaper == null);
+            updateAuroraStagePalette();
+            actionBar.setAuroraStage(auroraStage);
+            if (chatActivityEnterView != null) {
+                chatActivityEnterView.auroraStage = auroraStage;
+            }
+        }
 
         if (isTopic) {
             reactionsMentionCount = forumTopic.unread_reactions_count;
@@ -13073,10 +13116,19 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
                     canvas.restore();
                 }
             }
-            if (child == actionBar && parentLayout != null) {
+            if (child == actionBar && parentLayout != null && (auroraStage == null || !auroraStage.isEnabled())) {
                 parentLayout.drawHeaderShadow(canvas, actionBar.getVisibility() == VISIBLE ? (int) actionBar.getTranslationY() + actionBar.getMeasuredHeight() + (inPreviewMode && Build.VERSION.SDK_INT >= 21 ? AndroidUtilities.statusBarHeight : 0) : 0);
             }
             return result;
+        }
+
+        @Override
+        protected boolean drawAuroraBackground(Canvas canvas, View view) {
+            if (auroraStage == null || !auroraStage.isEnabled()) {
+                return false;
+            }
+            auroraStage.draw(canvas, view, view.getY(), view.getHeight(), getMeasuredWidth(), getMeasuredHeight());
+            return true;
         }
 
         @Override
@@ -20551,6 +20603,10 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
     @Override
     public void onTransitionAnimationStart(boolean isOpen, boolean backward) {
         super.onTransitionAnimationStart(isOpen, backward);
+        if (isOpen && !backward) {
+            // Aurora Flow: opening a chat swells the light.
+            AuroraEnergy.pulse(AuroraEnergy.OPEN_CHAT);
+        }
         startMs = System.currentTimeMillis();
         int[] alowedNotifications = null;
         if (isOpen) {
@@ -25540,6 +25596,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         if (isInScheduleMode() || primaryMessage == null) {
             return;
         }
+        AuroraEnergy.pulse(AuroraEnergy.REACT);
 
         ReactionsEffectOverlay.removeCurrent(false);
         boolean added = primaryMessage.selectReaction(visibleReaction, bigEmoji, fromDoubleTap);

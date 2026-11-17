@@ -21,6 +21,7 @@ import android.graphics.drawable.shapes.RoundRectShape;
 import androidx.core.content.ContextCompat;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
@@ -37,6 +38,9 @@ public class CanvasUtils {
 
     public static Drawable createFabBackground(boolean altColor) {
         int r = AndroidUtilities.dp(ExteraConfig.squareFab ? 16 : 100);
+        if (AuroraTheme.isActive()) {
+            return AuroraTheme.createFabBackground(r);
+        }
         int c = Theme.getColor(altColor ? Theme.key_dialogFloatingButton : Theme.key_chats_actionBackground);
         int pc = Theme.getColor(altColor ? Theme.key_dialogFloatingButtonPressed : Theme.key_chats_actionPressedBackground);
         return Theme.createSimpleSelectorRoundRectDrawable(r, c, pc);

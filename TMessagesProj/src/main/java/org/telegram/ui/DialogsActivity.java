@@ -65,6 +65,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -87,6 +88,8 @@ import com.exteragram.messenger.components.TranslateBeforeSendWrapper;
 import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraHeaderView;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
@@ -305,6 +308,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private ActionBarMenuItem doneItem;
     private ProxyDrawable proxyDrawable;
     private RLottieImageView floatingButton;
+    private AuroraHeaderView auroraHeaderView;
     private RadialProgressView floatingProgressView;
     private FrameLayout floatingButtonContainer;
     private ChatAvatarContainer avatarContainer;
@@ -681,6 +685,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 top = (int) (-getY() + actionBar.getY());
             }
             rightSlidingDialogContainer.setCurrentTop(top + actionBarHeight);
+            float auroraAlpha = 0f;
+            if (auroraHeaderView != null) {
+                if (folderId == 0 && AuroraTheme.isActive()) {
+                    auroraAlpha = (1f - progressToActionMode) * (whiteActionBar ? 1f - searchAnimationProgress : 1f);
+                }
+                auroraHeaderView.setHeader(top, actionBarHeight, auroraAlpha);
+            }
             if (whiteActionBar) {
                 if (searchAnimationProgress == 1f) {
                     actionBarSearchPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite));
@@ -763,7 +774,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             if (parentLayout != null && actionBar != null && !actionBar.getCastShadows()) {
                 int y = (int) (actionBar.getY() + getActionBarFullHeight());
-                parentLayout.drawHeaderShadow(canvas, (int) (255 * (1f - searchAnimationProgress)), y);
+                parentLayout.drawHeaderShadow(canvas, (int) (255 * (1f - searchAnimationProgress) * (1f - auroraAlpha)), y);
                 if (searchAnimationProgress > 0) {
                     if (searchAnimationProgress < 1) {
                         int a = Theme.dividerPaint.getAlpha();
@@ -3112,6 +3123,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         ContentView contentView = new ContentView(context);
         fragmentView = contentView;
 
+        if (!inPreviewMode) {
+            auroraHeaderView = new AuroraHeaderView(context);
+            contentView.addView(auroraHeaderView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
+
         int pagesCount = folderId == 0 && (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) ? 2 : 1;
         viewPages = new ViewPage[pagesCount];
         for (int a = 0; a < pagesCount; a++) {
@@ -3880,8 +3896,30 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             floatingButtonContainer.setContentDescription(LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle));
         }
         StateListAnimator animator = new StateListAnimator();
-        animator.addState(new int[]{android.R.attr.state_pressed}, ObjectAnimator.ofFloat(floatingButtonContainer, View.TRANSLATION_Z, AndroidUtilities.dp(2), AndroidUtilities.dp(4)).setDuration(200));
-        animator.addState(new int[]{}, ObjectAnimator.ofFloat(floatingButtonContainer, View.TRANSLATION_Z, AndroidUtilities.dp(4), AndroidUtilities.dp(2)).setDuration(200));
+        if (AuroraTheme.isActive()) {
+            // Aurora Motion: the button sinks a little when pressed and springs back.
+            AnimatorSet pressAnimator = new AnimatorSet();
+            pressAnimator.playTogether(
+                    ObjectAnimator.ofFloat(floatingButtonContainer, View.TRANSLATION_Z, AndroidUtilities.dp(2), AndroidUtilities.dp(4)),
+                    ObjectAnimator.ofFloat(floatingButtonContainer, View.SCALE_X, 0.94f),
+                    ObjectAnimator.ofFloat(floatingButtonContainer, View.SCALE_Y, 0.94f)
+            );
+            pressAnimator.setDuration(150);
+            pressAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT);
+            AnimatorSet releaseAnimator = new AnimatorSet();
+            releaseAnimator.playTogether(
+                    ObjectAnimator.ofFloat(floatingButtonContainer, View.TRANSLATION_Z, AndroidUtilities.dp(4), AndroidUtilities.dp(2)),
+                    ObjectAnimator.ofFloat(floatingButtonContainer, View.SCALE_X, 1f),
+                    ObjectAnimator.ofFloat(floatingButtonContainer, View.SCALE_Y, 1f)
+            );
+            releaseAnimator.setDuration(350);
+            releaseAnimator.setInterpolator(new OvershootInterpolator(2f));
+            animator.addState(new int[]{android.R.attr.state_pressed}, pressAnimator);
+            animator.addState(new int[]{}, releaseAnimator);
+        } else {
+            animator.addState(new int[]{android.R.attr.state_pressed}, ObjectAnimator.ofFloat(floatingButtonContainer, View.TRANSLATION_Z, AndroidUtilities.dp(2), AndroidUtilities.dp(4)).setDuration(200));
+            animator.addState(new int[]{}, ObjectAnimator.ofFloat(floatingButtonContainer, View.TRANSLATION_Z, AndroidUtilities.dp(4), AndroidUtilities.dp(2)).setDuration(200));
+        }
         floatingButtonContainer.setStateListAnimator(animator);
         floatingButtonContainer.setOutlineProvider(new ViewOutlineProvider() {
             @SuppressLint("NewApi")

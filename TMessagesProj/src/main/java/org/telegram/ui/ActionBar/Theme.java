@@ -76,6 +76,7 @@ import androidx.core.math.MathUtils;
 import com.exteragram.messenger.ExteraConfig;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.MonetUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -2366,7 +2367,7 @@ public class Theme {
             if (isDark != UNKNOWN) {
                 return isDark == DARK;
             }
-            if ("Dark Blue".equals(name) || "Night".equals(name) || "Monet Dark".equals(name)) {
+            if ("Dark Blue".equals(name) || "Night".equals(name) || "Monet Dark".equals(name) || AuroraTheme.THEME_NAME.equals(name)) {
                 isDark = DARK;
             } else if ("Blue".equals(name) || "Arctic Blue".equals(name) || "Day".equals(name) || "Monet Light".equals(name)) {
                 isDark = LIGHT;
@@ -4473,6 +4474,16 @@ public class Theme {
             themes.add(themeInfo);
             themesDict.put("Monet Dark", themeInfo);
         }
+
+        themeInfo = new ThemeInfo();
+        themeInfo.name = AuroraTheme.THEME_NAME;
+        themeInfo.assetName = AuroraTheme.ASSET_NAME;
+        themeInfo.previewBackgroundColor = 0xff2e2170;
+        themeInfo.previewInColor = 0xff1e1b2c;
+        themeInfo.previewOutColor = 0xff4b3bc4;
+        themeInfo.sortIndex = 8;
+        themes.add(themeInfo);
+        themesDict.put(AuroraTheme.THEME_NAME, themeInfo);
 
         String themesString = themeConfig.getString("themes2", null);
 

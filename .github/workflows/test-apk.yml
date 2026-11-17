@@ -99,11 +99,15 @@ jobs:
           EXTRA=""
           if [ "$ABI" != "both" ]; then EXTRA="-Pandroid.injected.build.abi=$ABI"; fi
           ./gradlew assembleBetaDebug $EXTRA --stacktrace
+          # Builds with an injected ABI write the APK under intermediates/, not outputs/
+          mkdir -p apk-out
+          find TMessagesProj/build -name '*.apk' -path '*beta*' -exec cp {} apk-out/ \;
+          ls -la apk-out
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ayugram-test-apk-${{ github.run_number }}
-          path: TMessagesProj/build/outputs/apk/beta/debug/*.apk
+          path: apk-out/*.apk
           if-no-files-found: error
           retention-days: 14

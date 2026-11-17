@@ -123,6 +123,7 @@ import com.radolyn.ayugram.utils.AyuState;
 import com.radolyn.ayugram.utils.AyuGhostUtils;
 import com.radolyn.ayugram.ui.AyuMessageHistory;
 
+import com.radolyn.ayugram.ui.aurora.AuroraMessageMotion;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.PhoneFormat.PhoneFormat;
@@ -4168,6 +4169,10 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             @Override
             protected void onChildPressed(View child, float x, float y, boolean pressed) {
                 super.onChildPressed(child, x, y, pressed);
+                if (child instanceof ChatMessageCell && ((ChatMessageCell) child).getCurrentMessagesGroup() == null) {
+                    // Aurora Motion: the bubble sinks a little under the finger.
+                    AuroraMessageMotion.press(child, pressed);
+                }
                 if (child instanceof ChatMessageCell) {
                     ChatMessageCell chatMessageCell = (ChatMessageCell) child;
                     MessageObject object = chatMessageCell.getMessageObject();
@@ -5246,6 +5251,9 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         chatListView.setClipToPadding(false);
         chatListView.setAnimateEmptyView(true, RecyclerListView.EMPTY_VIEW_ANIMATION_TYPE_ALPHA_SCALE);
         chatListView.setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY);
+        if (AuroraTheme.isActive() && !inPreviewMode) {
+            AuroraMessageMotion.riseInOnFirstLayout(chatListView);
+        }
         chatListViewPaddingTop = 0;
         invalidateChatListViewTopPadding();
         if (MessagesController.getGlobalMainSettings().getBoolean("view_animations", true)) {

@@ -76,6 +76,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 public class ReactionsContainerLayout extends FrameLayout implements NotificationCenter.NotificationCenterDelegate {
 
     public final static Property<ReactionsContainerLayout, Float> TRANSITION_PROGRESS_VALUE = new Property<ReactionsContainerLayout, Float>(Float.class, "transitionProgress") {
@@ -480,7 +482,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
         nextRecentReaction.getLayoutParams().width = size - AndroidUtilities.dp(12);
         nextRecentReaction.getLayoutParams().height = size;
 
-        bgPaint.setColor(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider));
+        bgPaint.setColor(backgroundColor());
         MediaDataController.getInstance(currentAccount).preloadDefaultReactions();
     }
 
@@ -670,6 +672,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                 canvas.scale(sc, sc, pivotX, getHeight() / 2f);
             }
             canvas.drawRoundRect(rect, radius, radius, bgPaint);
+            if (AuroraTheme.isActive()) {
+                drawAuroraRim(canvas);
+            }
             canvas.restoreToCount(s);
         }
 
@@ -932,7 +937,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
     private void invalidateShaders() {
         int dp = AndroidUtilities.dp(24);
         float cy = getHeight() / 2f;
-        int clr = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground);
+        int clr = backgroundColor();
         leftShadowPaint.setShader(new LinearGradient(0, cy, dp, cy, clr, Color.TRANSPARENT, Shader.TileMode.CLAMP));
         rightShadowPaint.setShader(new LinearGradient(getWidth(), cy, getWidth() - dp, cy, clr, Color.TRANSPARENT, Shader.TileMode.CLAMP));
         invalidate();
@@ -1081,7 +1086,12 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
         setAlpha(1f);
         notificationsLocker.lock();
         ObjectAnimator animator;
-        if (allowSmoothEnterTransition()) {
+        if (AuroraTheme.isActive()) {
+            // amBar: .3s cubic-bezier(.3,.7,.3,1.4), rising 8dp into place (see draw()).
+            auroraRising = true;
+            animator = ObjectAnimator.ofFloat(this, ReactionsContainerLayout.TRANSITION_PROGRESS_VALUE, 0f, 1f).setDuration(300);
+            animator.setInterpolator(AURORA_BAR_EASE);
+        } else if (allowSmoothEnterTransition()) {
             animator = ObjectAnimator.ofFloat(this, ReactionsContainerLayout.TRANSITION_PROGRESS_VALUE, 0f, 1f).setDuration(250);
             animator.setInterpolator(new OvershootInterpolator(0.5f));
         } else {
@@ -1092,10 +1102,47 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
             @Override
             public void onAnimationEnd(Animator animation) {
                 super.onAnimationEnd(animation);
+                auroraRising = false;
+                invalidate();
                 notificationsLocker.unlock();
             }
         });
         animator.start();
+    }
+
+    private static final CubicBezierInterpolator AURORA_BAR_EASE = new CubicBezierInterpolator(0.3, 0.7, 0.3, 1.4);
+    private boolean auroraRising;
+    private Paint auroraRimPaint;
+
+    /** Aurora Motion: the design's dark pill, rgb(28,26,44) (kept opaque over the shadow). */
+    private int backgroundColor() {
+        return AuroraTheme.isActive() ? 0xff1c1a2c : Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, resourcesProvider);
+    }
+
+    /** Aurora Motion: the pill's thin light rim, rgba(255,255,255,.14). */
+    private void drawAuroraRim(Canvas canvas) {
+        if (auroraRimPaint == null) {
+            auroraRimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            auroraRimPaint.setStyle(Paint.Style.STROKE);
+            auroraRimPaint.setStrokeWidth(Math.max(1, AndroidUtilities.dp(1)));
+        }
+        auroraRimPaint.setColor(0x24ffffff);
+        float inset = auroraRimPaint.getStrokeWidth() / 2f;
+        AndroidUtilities.rectTmp.set(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset);
+        float r = Math.max(0, radius - inset);
+        canvas.drawRoundRect(AndroidUtilities.rectTmp, r, r, auroraRimPaint);
+    }
+
+    @Override
+    public void draw(Canvas canvas) {
+        if (auroraRising && transitionProgress != 1f) {
+            canvas.save();
+            canvas.translate(0, AndroidUtilities.dp(8) * (1f - transitionProgress));
+            super.draw(canvas);
+            canvas.restore();
+        } else {
+            super.draw(canvas);
+        }
     }
 
     public int getTotalWidth() {

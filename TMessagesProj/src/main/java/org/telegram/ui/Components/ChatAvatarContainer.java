@@ -9,6 +9,8 @@
 package org.telegram.ui.Components;
 
 import android.animation.Animator;
+
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
@@ -669,11 +671,11 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                 int type = MessagesController.getInstance(currentAccount).getPrintingStringType(parentFragment.getDialogId(), parentFragment.getThreadId());
                 if (type == 5) {
                     subtitleTextView.replaceTextWithDrawable(statusDrawables[type], "**oo**");
-                    statusDrawables[type].setColor(getThemedColor(Theme.key_chat_status));
+                    statusDrawables[type].setColor(typingColor());
                     subtitleTextView.setLeftDrawable(null);
                 } else {
                     subtitleTextView.replaceTextWithDrawable(null, null);
-                    statusDrawables[type].setColor(getThemedColor(Theme.key_chat_status));
+                    statusDrawables[type].setColor(typingColor());
                     subtitleTextView.setLeftDrawable(statusDrawables[type]);
                 }
                 currentTypingDrawable = statusDrawables[type];
@@ -719,6 +721,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
         }
         CharSequence newSubtitle;
         boolean useOnlineColor = false;
+        auroraTyping = !(printString == null || printString.length() == 0 || ChatObject.isChannel(chat) && !chat.megagroup);
         if (printString == null || printString.length() == 0 || ChatObject.isChannel(chat) && !chat.megagroup) {
             if (parentFragment.isThreadChat() && !parentFragment.isTopic) {
                 if (titleTextView.getTag() != null) {
@@ -891,7 +894,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
         if (lastSubtitle == null) {
             subtitleTextView.setText(newSubtitle);
             if (overrideSubtitleColor == null) {
-                subtitleTextView.setTextColor(getThemedColor(lastSubtitleColorKey));
+                subtitleTextView.setTextColor(subtitleColor(lastSubtitleColorKey));
                 subtitleTextView.setTag(lastSubtitleColorKey);
             } else {
                 subtitleTextView.setTextColor(overrideSubtitleColor);
@@ -1060,7 +1063,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                 if (overrideSubtitleColor != null) {
                     subtitleTextView.setTextColor(overrideSubtitleColor);
                 } else if (lastSubtitleColorKey >= 0) {
-                    subtitleTextView.setTextColor(getThemedColor(lastSubtitleColorKey));
+                    subtitleTextView.setTextColor(subtitleColor(lastSubtitleColorKey));
                     subtitleTextView.setTag(lastSubtitleColorKey);
                 }
             }
@@ -1112,7 +1115,22 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
 
     public void updateColors() {
         if (currentTypingDrawable != null) {
-            currentTypingDrawable.setColor(getThemedColor(Theme.key_chat_status));
+            currentTypingDrawable.setColor(typingColor());
         }
+    }
+
+    private boolean auroraTyping;
+
+    /** Aurora Motion: "typing" and its dots are pale lavender, as in the design. */
+    private int typingColor() {
+        return AuroraTheme.isActive() ? AuroraTheme.TYPING : getThemedColor(Theme.key_chat_status);
+    }
+
+    /** Aurora Motion: "online" is mint and "typing" pale lavender; everything else keeps its theme colour. */
+    private int subtitleColor(int key) {
+        if (key == Theme.key_chat_status && AuroraTheme.isActive()) {
+            return auroraTyping ? AuroraTheme.TYPING : AuroraTheme.ONLINE;
+        }
+        return getThemedColor(key);
     }
 }

@@ -73,6 +73,9 @@ import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.PopupUtils;
 import com.exteragram.messenger.utils.SystemUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
+import org.telegram.messenger.Utilities;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
@@ -916,6 +919,11 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             float cx = imageView.getLeft() + imageView.getMeasuredWidth() / 2f;
             float cy = imageView.getTop() + imageView.getMeasuredWidth() / 2f;
 
+            if (AuroraTheme.isActive()) {
+                drawAuroraTile(canvas, cx, cy, scale);
+                return;
+            }
+
             attachButtonPaint.setColor(getThemedColor(backgroundKey));
             attachButtonPaint.setStyle(Paint.Style.STROKE);
             attachButtonPaint.setStrokeWidth(AndroidUtilities.dp(3) * scale);
@@ -927,6 +935,31 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             attachButtonPaint.setAlpha(255);
             attachButtonPaint.setStyle(Paint.Style.FILL);
             canvas.drawRoundRect(cx - width, cy - width, cx + width, cy + width, ExteraConfig.getAvatarCorners(width * 2, true), ExteraConfig.getAvatarCorners(width * 2, true), attachButtonPaint);
+        }
+
+        /**
+         * Aurora Motion: a 52dp rounded square (radius 18) in the button's colour,
+         * like the design's attach tiles; when selected, a ring around it as before.
+         */
+        private void drawAuroraTile(Canvas canvas, float cx, float cy, float scale) {
+            float half = AndroidUtilities.dp(26) * scale;
+            float corner = AndroidUtilities.dp(18) * scale;
+
+            attachButtonPaint.setColor(getThemedColor(backgroundKey));
+            attachButtonPaint.setStyle(Paint.Style.STROKE);
+            attachButtonPaint.setStrokeWidth(AndroidUtilities.dp(2.5f) * scale);
+            attachButtonPaint.setAlpha(Math.round(255f * checkedState));
+            float ring = half - 0.5f * attachButtonPaint.getStrokeWidth();
+            if (checkedState > 0) {
+                canvas.drawRoundRect(cx - ring, cy - ring, cx + ring, cy + ring, corner, corner, attachButtonPaint);
+            }
+
+            float inset = AndroidUtilities.dp(5) * checkedState;
+            float fill = half - inset;
+            float fillCorner = Math.max(0, corner - inset);
+            attachButtonPaint.setAlpha(255);
+            attachButtonPaint.setStyle(Paint.Style.FILL);
+            canvas.drawRoundRect(cx - fill, cy - fill, cx + fill, cy + fill, fillCorner, fillCorner, attachButtonPaint);
         }
 
         @Override
@@ -3316,6 +3349,11 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
 
         @Override
         public void setValue(ChatAttachAlert object, float value) {
+            openProgress = value;
+            if (AuroraTheme.isActive()) {
+                setAuroraTilesProgress(value);
+                return;
+            }
             for (int a = 0, N = buttonsRecyclerView.getChildCount(); a < N; a++) {
                 float startTime = 32.0f * (3 - a);
                 View child = buttonsRecyclerView.getChildAt(a);
@@ -3377,6 +3415,43 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
     private SpringAnimation appearSpringAnimation;
     private AnimatorSet buttonsAnimation;
 
+    private static final float AURORA_TILES_MS = 1000f;
+    private static final CubicBezierInterpolator AURORA_TILE_EASE = new CubicBezierInterpolator(0.3, 0.7, 0.3, 1.3);
+
+    /**
+     * Aurora Motion's amTile: each tile fades in, rises 14dp and grows from
+     * .85 (.4s, cubic-bezier(.3,.7,.3,1.3)), the first at 150ms and each next
+     * one 50ms later, left to right. {@code time} is in milliseconds.
+     */
+    private void setAuroraTilesProgress(float time) {
+        boolean animate = AuroraTheme.canAnimate();
+        for (int a = 0, N = buttonsRecyclerView.getChildCount(); a < N; a++) {
+            View child = buttonsRecyclerView.getChildAt(a);
+            int index = buttonsRecyclerView.getChildAdapterPosition(child);
+            if (index < 0) {
+                index = a;
+            }
+            float t = animate ? Utilities.clamp((time - 150f - 50f * index) / 400f, 1f, 0f) : 1f;
+            float p = t >= 1f ? 1f : AURORA_TILE_EASE.getInterpolation(t);
+            float scale = 0.85f + 0.15f * p;
+            child.setAlpha(Utilities.clamp(p, 1f, 0f));
+            child.setTranslationY(AndroidUtilities.dp(14) * (1f - p));
+            if (child instanceof AttachButton) {
+                AttachButton attachButton = (AttachButton) child;
+                attachButton.textView.setScaleX(scale);
+                attachButton.textView.setScaleY(scale);
+                attachButton.imageView.setScaleX(scale);
+                attachButton.imageView.setScaleY(scale);
+            } else if (child instanceof AttachBotButton) {
+                AttachBotButton attachButton = (AttachBotButton) child;
+                attachButton.nameTextView.setScaleX(scale);
+                attachButton.nameTextView.setScaleY(scale);
+                attachButton.imageView.setScaleX(scale);
+                attachButton.imageView.setScaleY(scale);
+            }
+        }
+    }
+
     @Override
     protected boolean onCustomOpenAnimation() {
         photoLayout.setTranslationX(0);
@@ -3387,8 +3462,22 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         super.containerView.setTranslationY(fromTranslationY);
 
         buttonsAnimation = new AnimatorSet();
-        buttonsAnimation.playTogether(ObjectAnimator.ofFloat(this, ATTACH_ALERT_PROGRESS, 0.0f, 400.0f));
-        buttonsAnimation.setDuration(400);
+        if (AuroraTheme.isActive()) {
+            // The tiles pop in left to right; the value is in milliseconds.
+            buttonsAnimation.playTogether(ObjectAnimator.ofFloat(this, ATTACH_ALERT_PROGRESS, 0.0f, AURORA_TILES_MS));
+            buttonsAnimation.setDuration((long) AURORA_TILES_MS);
+            buttonsAnimation.setInterpolator(new android.view.animation.LinearInterpolator());
+            buttonsAnimation.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    // Never leave a tile half faded.
+                    setAuroraTilesProgress(AURORA_TILES_MS);
+                }
+            });
+        } else {
+            buttonsAnimation.playTogether(ObjectAnimator.ofFloat(this, ATTACH_ALERT_PROGRESS, 0.0f, 400.0f));
+            buttonsAnimation.setDuration(400);
+        }
         buttonsAnimation.setStartDelay(20);
         ATTACH_ALERT_PROGRESS.set(this, 0.0f);
         buttonsAnimation.start();

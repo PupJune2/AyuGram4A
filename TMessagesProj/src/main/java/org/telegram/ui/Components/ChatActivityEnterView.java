@@ -3472,6 +3472,9 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
     private Paint auroraFieldFill;
     private Paint auroraFieldStroke;
+    private boolean auroraHasText;
+    private float auroraRim;
+    private long auroraRimTime;
 
     /**
      * Aurora Motion: the message field sits in a softly filled pill (emoji,
@@ -3500,7 +3503,24 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
         float radius = Math.min(AndroidUtilities.rectTmp.height() / 2f, AndroidUtilities.dp(22));
         int alpha = (int) (255 * messageEditTextContainer.getAlpha() * textFieldContainer.getAlpha());
         auroraFieldFill.setAlpha(alpha * 0x14 / 255);
-        auroraFieldStroke.setAlpha(alpha * 0x24 / 255);
+        // Rim: white 14% when empty, lavender rgba(196,181,253,.5) with text (.3s).
+        long now = SystemClock.elapsedRealtime();
+        float target = auroraHasText ? 1f : 0f;
+        if (auroraRim != target) {
+            if (!AuroraTheme.canAnimate()) {
+                auroraRim = target;
+            } else {
+                float step = auroraRimTime == 0 ? 16f / 300f : Math.min(1f, (now - auroraRimTime) / 300f);
+                auroraRim = target > auroraRim ? Math.min(target, auroraRim + step) : Math.max(target, auroraRim - step);
+            }
+            if (auroraRim != target) {
+                invalidate();
+            }
+        }
+        auroraRimTime = auroraRim != target ? now : 0;
+        int rim = ColorUtils.blendARGB(0x24ffffff, 0x80c4b5fd, auroraRim);
+        auroraFieldStroke.setColor(rim);
+        auroraFieldStroke.setAlpha(alpha * Color.alpha(rim) / 255);
         canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFieldFill);
         canvas.drawRoundRect(AndroidUtilities.rectTmp, radius, radius, auroraFieldStroke);
     }
@@ -4270,6 +4290,11 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
             @Override
             public void afterTextChanged(Editable editable) {
+                if (AuroraTheme.isActive() && (editable.length() > 0) != auroraHasText) {
+                    // The pill's rim turns lavender while there is text.
+                    auroraHasText = editable.length() > 0;
+                    invalidate();
+                }
                 if (ignorePrevTextChange) {
                     return;
                 }

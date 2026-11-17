@@ -29,6 +29,9 @@ import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.TextMessageEnterTransition;
 import org.telegram.ui.VoiceMessageEnterTransition;
 
+import com.radolyn.ayugram.ui.aurora.AuroraMessageMotion;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -264,6 +267,7 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
 
     @Override
     public boolean animateAdd(RecyclerView.ViewHolder holder) {
+        AuroraMessageMotion.cancel(holder.itemView);
         resetAnimation(holder);
         holder.itemView.setAlpha(0);
         if (!shouldAnimateEnterFromBottom) {
@@ -289,6 +293,8 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
         if (!(chatMessageCell != null && chatMessageCell.getTransitionParams().ignoreAlpha)) {
             holder.itemView.setAlpha(1);
         }
+        // Aurora Motion: new messages pop (yours) or rise (replies) as they slide up.
+        boolean auroraEnter = AuroraTheme.isActive();
         if (chatMessageCell != null && activity.animatingMessageObjects.contains(chatMessageCell.getMessageObject())) {
             activity.animatingMessageObjects.remove(chatMessageCell.getMessageObject());
             if (activity.getChatActivityEnterView().canShowMessageTransition()) {
@@ -296,15 +302,20 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
                     if (Math.abs(view.getTranslationY()) < view.getMeasuredHeight() * 3f) {
                         VoiceMessageEnterTransition transition = new VoiceMessageEnterTransition(chatMessageCell, activity.getChatActivityEnterView(), recyclerListView, activity.messageEnterTransitionContainer, resourcesProvider);
                         transition.start();
+                        auroraEnter = false;
                     }
                 } else {
-                    if (SharedConfig.getDevicePerformanceClass() != SharedConfig.PERFORMANCE_CLASS_LOW && Math.abs(view.getTranslationY()) < recyclerListView.getMeasuredHeight()) {
+                    // Under Aurora the bubble pops in itself instead of the text flying over from the field.
+                    if (!auroraEnter && SharedConfig.getDevicePerformanceClass() != SharedConfig.PERFORMANCE_CLASS_LOW && Math.abs(view.getTranslationY()) < recyclerListView.getMeasuredHeight()) {
                         TextMessageEnterTransition transition = new TextMessageEnterTransition(chatMessageCell, activity, recyclerListView, activity.messageEnterTransitionContainer, resourcesProvider);
                         transition.start();
                     }
                 }
                 activity.getChatActivityEnterView().startMessageTransition();
             }
+        }
+        if (auroraEnter) {
+            AuroraMessageMotion.playEnter(view, !(chatMessageCell != null && chatMessageCell.getTransitionParams().ignoreAlpha));
         }
         animation.translationY(0).setDuration(getMoveDuration())
                 .setInterpolator(translationInterpolator)
@@ -338,6 +349,7 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
 
     @Override
     public boolean animateRemove(RecyclerView.ViewHolder holder, ItemHolderInfo info) {
+        AuroraMessageMotion.cancel(holder.itemView);
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("animate remove");
         }
@@ -378,6 +390,7 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
 
     @Override
     public boolean animateMove(RecyclerView.ViewHolder holder, ItemHolderInfo info, int fromX, int fromY, int toX, int toY) {
+        AuroraMessageMotion.cancel(holder.itemView);
         final View view = holder.itemView;
         ChatMessageCell chatMessageCell = null;
         if (holder.itemView instanceof ChatMessageCell) {
@@ -882,6 +895,10 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
     @Override
     public boolean animateChange(RecyclerView.ViewHolder oldHolder, RecyclerView.ViewHolder newHolder, ItemHolderInfo info,
                                  int fromX, int fromY, int toX, int toY) {
+        AuroraMessageMotion.cancel(oldHolder.itemView);
+        if (newHolder != null) {
+            AuroraMessageMotion.cancel(newHolder.itemView);
+        }
         if (oldHolder == newHolder) {
             // Don't know how to run change animations when the same view holder is re-used.
             // run a move animation to handle position changes.
@@ -1035,6 +1052,7 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
 
     @Override
     public void endAnimation(RecyclerView.ViewHolder item) {
+        AuroraMessageMotion.cancel(item.itemView);
         Animator animator = animators.remove(item);
         if (animator != null) {
             animator.cancel();

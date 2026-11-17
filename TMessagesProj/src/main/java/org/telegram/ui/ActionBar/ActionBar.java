@@ -1915,6 +1915,23 @@ public class ActionBar extends FrameLayout {
                         backButtonImageView.getY() + backButtonImageView.getHeight() / 2f,
                         AndroidUtilities.dp(20), backButtonImageView.getAlpha());
             }
+            // And glass circles behind the round header buttons (call, more).
+            if (menu != null && menu.getVisibility() == VISIBLE && menu.getAlpha() > 0f && !isSearchFieldVisible) {
+                for (int i = 0; i < menu.getChildCount(); i++) {
+                    View child = menu.getChildAt(i);
+                    if (!(child instanceof ActionBarMenuItem) || child.getVisibility() != VISIBLE || child.getAlpha() <= 0f) {
+                        continue;
+                    }
+                    ActionBarMenuItem item = (ActionBarMenuItem) child;
+                    if (item.isSearchField() || item.getIconView() == null || item.getIconView().getVisibility() != VISIBLE) {
+                        continue;
+                    }
+                    AuroraTheme.drawGlassCircle(canvas,
+                            menu.getX() + child.getX() + child.getWidth() / 2f,
+                            menu.getY() + child.getY() + child.getHeight() / 2f,
+                            AndroidUtilities.dp(20), child.getAlpha() * menu.getAlpha());
+                }
+            }
         }
         super.dispatchDraw(canvas);
     }

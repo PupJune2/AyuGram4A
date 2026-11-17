@@ -47,6 +47,10 @@ public final class AuroraTheme {
     public static final int BLUE = 0xff2f6bff;
     public static final int TEAL = 0xff14a89c;
     public static final int VIOLET_PRESSED = 0xff6646e8;
+    /** "typing" and its dots in the chat header. */
+    public static final int TYPING = 0xffdcd1ff;
+    /** "online" in the chat header. */
+    public static final int ONLINE = 0xffa7f3d0;
 
     // cubic-bezier(.2, .8, .2, 1), the design's "rise" easing.
     public static final CubicBezierInterpolator RISE = new CubicBezierInterpolator(0.2, 0.8, 0.2, 1.0);

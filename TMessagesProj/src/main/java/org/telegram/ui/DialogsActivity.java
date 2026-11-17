@@ -89,6 +89,7 @@ import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
 import com.radolyn.ayugram.ui.aurora.AuroraHeaderView;
+import com.radolyn.ayugram.ui.aurora.AuroraNewMenu;
 import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.AccountInstance;
@@ -309,6 +310,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private ProxyDrawable proxyDrawable;
     private RLottieImageView floatingButton;
     private AuroraHeaderView auroraHeaderView;
+    private AuroraNewMenu auroraNewMenu;
+    private ImageView auroraCloseIcon;
+    private AnimatorSet auroraFabIconAnimator;
     private RadialProgressView floatingProgressView;
     private FrameLayout floatingButtonContainer;
     private ChatAvatarContainer avatarContainer;
@@ -3631,6 +3635,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 viewPages[a].setVisibility(View.GONE);
             }
         }
+        if (auroraHeaderView != null && viewPages[0].listView != null) {
+            AuroraTheme.riseInOnFirstLayout(viewPages[0].listView);
+        }
 
         int type = 0;
         if (searchString != null) {
@@ -3879,6 +3886,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     return;
                 }
 
+                if (auroraNewMenu != null && (auroraNewMenu.isMenuShown() || AuroraTheme.isActive())) {
+                    setAuroraNewMenuShown(!auroraNewMenu.isMenuShown(), true);
+                    return;
+                }
+
                 Bundle args = new Bundle();
                 args.putBoolean("destroyAfterSelect", true);
                 presentFragment(new ContactsActivity(args));
@@ -3935,6 +3947,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         updateFloatingButtonColor();
         floatingButtonContainer.addView(floatingButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
+        if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0) {
+            auroraCloseIcon = new ImageView(context);
+            auroraCloseIcon.setScaleType(ImageView.ScaleType.CENTER);
+            auroraCloseIcon.setImageResource(R.drawable.msg_close);
+            auroraCloseIcon.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chats_actionIcon), PorterDuff.Mode.SRC_IN));
+            auroraCloseIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            auroraCloseIcon.setAlpha(0f);
+            auroraCloseIcon.setRotation(-90f);
+            auroraCloseIcon.setScaleX(0.5f);
+            auroraCloseIcon.setScaleY(0.5f);
+            floatingButtonContainer.addView(auroraCloseIcon, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
 
         floatingProgressView = new RadialProgressView(context);
         floatingProgressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon));
@@ -4567,6 +4592,44 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         };
         rightSlidingDialogContainer.setOpenProgress(0f);
+        if (auroraCloseIcon != null) {
+            // Drawn above the action bar; the button itself stays on top because it is elevated.
+            auroraNewMenu = new AuroraNewMenu(context, new AuroraNewMenu.Delegate() {
+                @Override
+                public void onNewMessage() {
+                    setAuroraNewMenuShown(false, false);
+                    Bundle args = new Bundle();
+                    args.putBoolean("destroyAfterSelect", true);
+                    presentFragment(new ContactsActivity(args));
+                }
+
+                @Override
+                public void onNewGroup() {
+                    setAuroraNewMenuShown(false, false);
+                    presentFragment(new GroupCreateActivity(new Bundle()));
+                }
+
+                @Override
+                public void onNewChannel() {
+                    setAuroraNewMenuShown(false, false);
+                    SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+                    if (!BuildVars.DEBUG_VERSION && preferences.getBoolean("channel_intro", false)) {
+                        Bundle args = new Bundle();
+                        args.putInt("step", 0);
+                        presentFragment(new ChannelCreateActivity(args));
+                    } else {
+                        presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANNEL_CREATE));
+                        preferences.edit().putBoolean("channel_intro", true).apply();
+                    }
+                }
+
+                @Override
+                public void onDismissRequested() {
+                    setAuroraNewMenuShown(false, true);
+                }
+            });
+            contentView.addView(auroraNewMenu, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        }
         contentView.addView(rightSlidingDialogContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         return fragmentView;
     }
@@ -5769,6 +5832,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onPause() {
         super.onPause();
+        setAuroraNewMenuShown(false, false);
         if (rightSlidingDialogContainer != null) {
             rightSlidingDialogContainer.onPause();
         }
@@ -5792,7 +5856,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public boolean onBackPressed() {
-        if (rightSlidingDialogContainer.hasFragment()) {
+        if (auroraNewMenu != null && auroraNewMenu.isMenuShown()) {
+            setAuroraNewMenuShown(false, true);
+            return false;
+        } else if (rightSlidingDialogContainer.hasFragment()) {
             if (rightSlidingDialogContainer.getFragment().onBackPressed()) {
                 rightSlidingDialogContainer.finishPreview();
                 searchViewPager.updateTabs();
@@ -10524,6 +10591,56 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         return arrayList;
+    }
+
+    private void setAuroraNewMenuShown(boolean show, boolean animated) {
+        if (auroraNewMenu == null || auroraCloseIcon == null || show == auroraNewMenu.isMenuShown()) {
+            return;
+        }
+        if (show) {
+            auroraNewMenu.show(floatingButtonContainer);
+        } else {
+            auroraNewMenu.dismiss(animated);
+        }
+        floatingButtonContainer.setContentDescription(show ? LocaleController.getString("Close", R.string.Close) : LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle));
+        if (auroraFabIconAnimator != null) {
+            auroraFabIconAnimator.cancel();
+            auroraFabIconAnimator = null;
+        }
+        // Pen turns away and the close mark turns in, as in the design.
+        float penAlpha = show ? 0f : 1f, penRotation = show ? 90f : 0f, penScale = show ? 0.5f : 1f;
+        float closeAlpha = show ? 1f : 0f, closeRotation = show ? 0f : -90f, closeScale = show ? 1f : 0.5f;
+        if (!animated || !AuroraTheme.canAnimate()) {
+            floatingButton.setAlpha(penAlpha);
+            floatingButton.setRotation(penRotation);
+            floatingButton.setScaleX(penScale);
+            floatingButton.setScaleY(penScale);
+            auroraCloseIcon.setAlpha(closeAlpha);
+            auroraCloseIcon.setRotation(closeRotation);
+            auroraCloseIcon.setScaleX(closeScale);
+            auroraCloseIcon.setScaleY(closeScale);
+            return;
+        }
+        AnimatorSet fade = new AnimatorSet();
+        fade.playTogether(
+                ObjectAnimator.ofFloat(floatingButton, View.ALPHA, penAlpha),
+                ObjectAnimator.ofFloat(auroraCloseIcon, View.ALPHA, closeAlpha)
+        );
+        fade.setDuration(250);
+        AnimatorSet turn = new AnimatorSet();
+        turn.playTogether(
+                ObjectAnimator.ofFloat(floatingButton, View.ROTATION, penRotation),
+                ObjectAnimator.ofFloat(floatingButton, View.SCALE_X, penScale),
+                ObjectAnimator.ofFloat(floatingButton, View.SCALE_Y, penScale),
+                ObjectAnimator.ofFloat(auroraCloseIcon, View.ROTATION, closeRotation),
+                ObjectAnimator.ofFloat(auroraCloseIcon, View.SCALE_X, closeScale),
+                ObjectAnimator.ofFloat(auroraCloseIcon, View.SCALE_Y, closeScale)
+        );
+        turn.setDuration(400);
+        turn.setInterpolator(new OvershootInterpolator(1.6f));
+        auroraFabIconAnimator = new AnimatorSet();
+        auroraFabIconAnimator.playTogether(fade, turn);
+        auroraFabIconAnimator.start();
     }
 
     private void updateFloatingButtonColor() {

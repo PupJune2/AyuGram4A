@@ -7,10 +7,18 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.util.StateSet;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.Animation;
+import android.view.animation.AnimationSet;
+import android.view.animation.LayoutAnimationController;
+import android.view.animation.TranslateAnimation;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LiteMode;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.CubicBezierInterpolator;
 
 /**
  * Aurora Motion: a built-in dark theme (assets/aurora.attheme) plus a few
@@ -27,6 +35,9 @@ public final class AuroraTheme {
     public static final int BLUE = 0xff2f6bff;
     public static final int TEAL = 0xff14a89c;
     public static final int VIOLET_PRESSED = 0xff6646e8;
+
+    // cubic-bezier(.2, .8, .2, 1), the design's "rise" easing.
+    public static final CubicBezierInterpolator RISE = new CubicBezierInterpolator(0.2, 0.8, 0.2, 1.0);
 
     private AuroraTheme() {
     }
@@ -45,6 +56,51 @@ public final class AuroraTheme {
             return false;
         }
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ValueAnimator.areAnimatorsEnabled();
+    }
+
+    /**
+     * The first time {@code list} lays out rows, they fade in and rise 16dp,
+     * one after another (60ms apart), like the design's chat list. Uses a
+     * layout animation, so it never leaves rows half-transparent if a row is
+     * recycled or animated by the item animator meanwhile.
+     */
+    public static void riseInOnFirstLayout(ViewGroup list) {
+        list.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (list.getChildCount() == 0) {
+                    return;
+                }
+                list.removeOnLayoutChangeListener(this);
+                if (!isActive() || !canAnimate()) {
+                    return;
+                }
+                AnimationSet rise = new AnimationSet(true);
+                rise.addAnimation(new AlphaAnimation(0f, 1f));
+                rise.addAnimation(new TranslateAnimation(0, 0, AndroidUtilities.dp(16), 0));
+                rise.setDuration(500);
+                rise.setInterpolator(RISE);
+                list.setLayoutAnimation(new LayoutAnimationController(rise, 0.12f));
+                list.setLayoutAnimationListener(new Animation.AnimationListener() {
+                    @Override
+                    public void onAnimationStart(Animation animation) {
+                    }
+
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                        list.post(() -> {
+                            list.setLayoutAnimation(null);
+                            list.setLayoutAnimationListener(null);
+                        });
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animation animation) {
+                    }
+                });
+                list.scheduleLayoutAnimation();
+            }
+        });
     }
 
     /**

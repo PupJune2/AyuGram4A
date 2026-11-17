@@ -8,4 +8,5 @@
   <string name="AuroraOpenMyChats">Открыть чаты</string>
   <!-- Aurora Motion chat list: the greeting title -->
   <string name="AuroraHello">Привет, %1$s</string>
+  <string name="AuroraStayInLoop">Будь в курсе</string>
 </resources>

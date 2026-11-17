@@ -8,5 +8,6 @@
   <string name="AuroraSignedInAs">Signed in as %1$s</string>
   <string name="AuroraOpenMyChats">Open my chats</string>
   <!-- Aurora Motion chat list: the greeting title -->
-  <string name="AuroraHello">Hello, %1$s</string>
+  <string name="AuroraHello">Hello %1$s</string>
+  <string name="AuroraStayInLoop">Stay in the loop</string>
 </resources>

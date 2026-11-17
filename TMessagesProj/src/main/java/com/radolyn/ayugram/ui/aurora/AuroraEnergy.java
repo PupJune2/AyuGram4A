@@ -97,6 +97,22 @@ public final class AuroraEnergy {
     }
 
     /**
+     * Holds the energy at least at {@code value} (0..1) for now, e.g. with the
+     * microphone level while recording, like the board's voice message light.
+     */
+    public static void raiseTo(float value) {
+        if (!enabled()) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        float current = levelAt(now);
+        if (value > current) {
+            level = Math.min(1f, value);
+            levelTime = now;
+        }
+    }
+
+    /**
      * Follows a finger on a window of {@code width} x {@code height}: a new
      * finger nudges the light, moves lean it, lifting lets it settle back.
      */

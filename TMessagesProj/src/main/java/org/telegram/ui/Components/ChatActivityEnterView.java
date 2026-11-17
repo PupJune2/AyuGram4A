@@ -1036,6 +1036,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
             animateToAmplitude = (float) (Math.min(WaveDrawable.MAX_AMPLITUDE, value) / WaveDrawable.MAX_AMPLITUDE);
             animateAmplitudeDiff = (animateToAmplitude - amplitude) / (100 + 500.0f * WaveDrawable.animationSpeedCircle);
+            // Aurora Flow: while you record, the chat's light breathes with your voice.
+            AuroraEnergy.raiseTo(0.3f + 0.65f * animateToAmplitude);
 
             invalidate();
         }

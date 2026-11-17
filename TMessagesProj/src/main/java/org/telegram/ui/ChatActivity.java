@@ -123,6 +123,8 @@ import com.radolyn.ayugram.utils.AyuState;
 import com.radolyn.ayugram.utils.AyuGhostUtils;
 import com.radolyn.ayugram.ui.AyuMessageHistory;
 
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
@@ -7259,6 +7261,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             }
         };
         actionBar.setDrawBlurBackground(contentView);
+        actionBar.setAuroraLights(AuroraTheme.isActive());
 
         if (isTopic) {
             reactionsMentionCount = forumTopic.unread_reactions_count;

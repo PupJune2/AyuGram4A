@@ -7,6 +7,10 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.graphics.Canvas;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
@@ -151,6 +155,45 @@ public final class AuroraTheme {
         animator.addState(new int[]{android.R.attr.state_pressed}, press);
         animator.addState(new int[]{}, release);
         return animator;
+    }
+
+    private static Paint glassFill;
+    private static Paint glassStroke;
+
+    /**
+     * A frosted round button backdrop: white at 12% with a 20% white rim.
+     */
+    public static void drawGlassCircle(Canvas canvas, float cx, float cy, float radius, float alpha) {
+        if (glassFill == null) {
+            glassFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glassStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+            glassStroke.setStyle(Paint.Style.STROKE);
+            glassStroke.setStrokeWidth(Math.max(1, AndroidUtilities.dp(1)));
+        }
+        glassFill.setColor(0xffffffff);
+        glassFill.setAlpha((int) (0x1f * alpha));
+        glassStroke.setColor(0xffffffff);
+        glassStroke.setAlpha((int) (0x33 * alpha));
+        canvas.drawCircle(cx, cy, radius, glassFill);
+        canvas.drawCircle(cx, cy, radius - glassStroke.getStrokeWidth() / 2f, glassStroke);
+    }
+
+    private static Paint sendCirclePaint;
+    private static float sendCircleKey = Float.NaN;
+
+    /**
+     * The design's send button: a violet-to-blue circle (135deg) behind the arrow.
+     */
+    public static void drawSendCircle(Canvas canvas, float cx, float cy, float radius) {
+        if (sendCirclePaint == null) {
+            sendCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        }
+        float key = cx * 31f + cy * 17f + radius;
+        if (key != sendCircleKey) {
+            sendCircleKey = key;
+            sendCirclePaint.setShader(new LinearGradient(cx - radius, cy - radius, cx + radius, cy + radius, VIOLET, BLUE, Shader.TileMode.CLAMP));
+        }
+        canvas.drawCircle(cx, cy, radius, sendCirclePaint);
     }
 
     /**

@@ -43,6 +43,8 @@ import android.widget.ImageView;
 import androidx.core.graphics.ColorUtils;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.radolyn.ayugram.ui.aurora.AuroraLights;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
@@ -1883,12 +1885,36 @@ public class ActionBar extends FrameLayout {
         setBackground(null);
     }
 
+    private AuroraLights auroraLights;
+
+    /**
+     * Aurora Motion: draws the drifting header lights behind the bar's content
+     * while the bar has the theme's own header colour (not a chat theme's, and
+     * not in selection mode).
+     */
+    public void setAuroraLights(boolean enabled) {
+        auroraLights = enabled ? new AuroraLights() : null;
+        invalidate();
+    }
+
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
             rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
             blurScrimPaint.setColor(actionBarColor);
             contentView.drawBlurRect(canvas, getY(), rectTmp, blurScrimPaint, true);
+        }
+        if (auroraLights != null && actionBarColor == AuroraTheme.HEADER_BASE && !isActionModeShowed() && AuroraTheme.isActive()) {
+            if (auroraLights.draw(canvas, 0, 0, getMeasuredWidth(), getMeasuredHeight(), 255)) {
+                postInvalidateDelayed(AuroraLights.FRAME_DELAY_MS);
+            }
+            // The design's glass back button.
+            if (backButtonImageView != null && backButtonImageView.getVisibility() == VISIBLE && backButtonImageView.getAlpha() > 0f) {
+                AuroraTheme.drawGlassCircle(canvas,
+                        backButtonImageView.getX() + backButtonImageView.getWidth() / 2f,
+                        backButtonImageView.getY() + backButtonImageView.getHeight() / 2f,
+                        AndroidUtilities.dp(20), backButtonImageView.getAlpha());
+            }
         }
         super.dispatchDraw(canvas);
     }

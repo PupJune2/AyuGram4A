@@ -20,7 +20,7 @@ on:
 
 concurrency:
   group: test-apk-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false   # let a running build finish; newer pushes wait in line
 
 jobs:
   build:

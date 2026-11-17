@@ -61,6 +61,16 @@ public class AuroraHeaderView extends View {
         }
     }
 
+    /**
+     * Aurora Flow: the lights take a chat's colours (null for the theme's own),
+     * fading over 1.3s, so the light carries over into the chat you open and
+     * back out of it.
+     */
+    public void setTint(int[] colors, boolean animated) {
+        lights.setColors(colors, animated);
+        invalidate();
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();

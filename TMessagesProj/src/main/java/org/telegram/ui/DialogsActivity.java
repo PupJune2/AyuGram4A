@@ -91,6 +91,7 @@ import com.exteragram.messenger.components.TranslateBeforeSendWrapper;
 import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
 import com.radolyn.ayugram.ui.aurora.AuroraChatsHeader;
 import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraHeaderView;
@@ -6859,6 +6860,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 rightSlidingDialogContainer.finishPreview();
                             }
                         }
+                        tintAuroraHeader(view, dialogId);
                         presentFragment(chatActivity);
                     }
                 }
@@ -7457,7 +7459,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (isOpen) {
             // Aurora Flow: coming (back) to the chats swells the header's light.
             AuroraEnergy.pulse(AuroraEnergy.CHATS);
+            if (backward && auroraHeaderView != null) {
+                // The header comes back in the chat's colours and fades home to its own.
+                auroraHeaderView.setTint(null, true);
+            }
         }
+    }
+
+    /** Aurora Flow: the header's light takes the colours of the chat being opened. */
+    private void tintAuroraHeader(View view, long dialogId) {
+        if (auroraHeaderView == null || !AuroraTheme.isActive()) {
+            return;
+        }
+        boolean saved = dialogId == getUserConfig().getClientUserId();
+        Bitmap photo = view instanceof DialogCell ? ((DialogCell) view).avatarImage.getBitmap() : null;
+        int colorIndex = AvatarDrawable.getColorIndex(DialogObject.isUserDialog(dialogId) ? dialogId : -dialogId);
+        auroraHeaderView.setTint(AuroraChatStage.paletteFor(colorIndex, saved, photo), true);
     }
 
     @Override

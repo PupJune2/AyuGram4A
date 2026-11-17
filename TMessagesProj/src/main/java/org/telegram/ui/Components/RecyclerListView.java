@@ -1605,6 +1605,15 @@ public class RecyclerListView extends RecyclerView {
         selectorRadius = radius;
     }
 
+    private int selectorInsetX;
+    private int selectorInsetY;
+
+    /** Shrinks the pressed-row highlight by this much on each side (Aurora Flow's inset rounded rows). */
+    public void setSelectorInsets(int horizontal, int vertical) {
+        selectorInsetX = horizontal;
+        selectorInsetY = vertical;
+    }
+
     public void setTopBottomSelectorRadius(int radius) {
         topBottomSelectorRadius = radius;
     }
@@ -2273,6 +2282,9 @@ public class RecyclerListView extends RecyclerView {
         }
         selectorRect.set(sel.getLeft(), sel.getTop(), sel.getRight(), sel.getBottom() - bottomPadding);
         selectorRect.offset((int) sel.getTranslationX(), (int) sel.getTranslationY());
+        if (selectorInsetX != 0 || selectorInsetY != 0) {
+            selectorRect.inset(selectorInsetX, selectorInsetY);
+        }
 
         final boolean enabled = sel.isEnabled();
         if (isChildViewEnabled != enabled) {

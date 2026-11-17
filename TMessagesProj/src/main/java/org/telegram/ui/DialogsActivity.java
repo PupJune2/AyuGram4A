@@ -91,6 +91,7 @@ import com.exteragram.messenger.components.TranslateBeforeSendWrapper;
 import com.exteragram.messenger.utils.CanvasUtils;
 import com.exteragram.messenger.utils.LocaleUtils;
 import com.exteragram.messenger.utils.TranslatorUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraChatStage;
 import com.radolyn.ayugram.ui.aurora.AuroraChatsHeader;
 import com.radolyn.ayugram.ui.aurora.AuroraEnergy;
 import com.radolyn.ayugram.ui.aurora.AuroraHeaderView;
@@ -3293,6 +3294,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             };
             viewPage.listView.setVerticalScrollBarEnabled(true);
             viewPage.listView.setInstantClick(true);
+            if (AuroraTheme.isActive()) {
+                // Aurora Flow: a pressed chat lights up as a rounded card (20dp) set in from the edges.
+                viewPage.listView.setSelectorRadius(AndroidUtilities.dp(20));
+                viewPage.listView.setSelectorInsets(AndroidUtilities.dp(8), AndroidUtilities.dp(2));
+                viewPage.listView.setSelectorDrawableColor(Theme.getColor(Theme.key_listSelector));
+            }
             viewPage.layoutManager = new LinearLayoutManager(context) {
 
                 @Override
@@ -4008,6 +4015,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (initialDialogsType == DIALOGS_TYPE_WIDGET) {
             floatingButton.setImageResource(R.drawable.floating_check);
             floatingButtonContainer.setContentDescription(LocaleController.getString("Done", R.string.Done));
+        } else if (AuroraTheme.isActive()) {
+            // Aurora Flow: the outline pen from the design's icon set.
+            floatingButton.setImageResource(R.drawable.aurora_ic_pen);
+            floatingButtonContainer.setContentDescription(LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle));
         } else {
             floatingButton.setAnimation(R.raw.write_contacts_fab_icon, 52, 52);
             floatingButtonContainer.setContentDescription(LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle));
@@ -4056,7 +4067,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0) {
             auroraCloseIcon = new ImageView(context);
             auroraCloseIcon.setScaleType(ImageView.ScaleType.CENTER);
-            auroraCloseIcon.setImageResource(R.drawable.msg_close);
+            auroraCloseIcon.setImageResource(R.drawable.aurora_ic_close);
             auroraCloseIcon.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chats_actionIcon), PorterDuff.Mode.SRC_IN));
             auroraCloseIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             auroraCloseIcon.setAlpha(0f);
@@ -6849,6 +6860,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 rightSlidingDialogContainer.finishPreview();
                             }
                         }
+                        tintAuroraHeader(view, dialogId);
                         presentFragment(chatActivity);
                     }
                 }
@@ -7447,7 +7459,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (isOpen) {
             // Aurora Flow: coming (back) to the chats swells the header's light.
             AuroraEnergy.pulse(AuroraEnergy.CHATS);
+            if (backward && auroraHeaderView != null) {
+                // The header comes back in the chat's colours and fades home to its own.
+                auroraHeaderView.setTint(null, true);
+            }
         }
+    }
+
+    /** Aurora Flow: the header's light takes the colours of the chat being opened. */
+    private void tintAuroraHeader(View view, long dialogId) {
+        if (auroraHeaderView == null || !AuroraTheme.isActive()) {
+            return;
+        }
+        boolean saved = dialogId == getUserConfig().getClientUserId();
+        Bitmap photo = view instanceof DialogCell ? ((DialogCell) view).avatarImage.getBitmap() : null;
+        int colorIndex = AvatarDrawable.getColorIndex(DialogObject.isUserDialog(dialogId) ? dialogId : -dialogId);
+        auroraHeaderView.setTint(AuroraChatStage.paletteFor(colorIndex, saved, photo), true);
     }
 
     @Override

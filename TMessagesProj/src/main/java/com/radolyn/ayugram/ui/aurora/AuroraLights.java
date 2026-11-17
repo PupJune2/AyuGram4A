@@ -8,6 +8,9 @@ import android.graphics.Shader;
 import android.os.SystemClock;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.ui.Components.CubicBezierInterpolator;
+
+import java.util.Arrays;
 
 /**
  * The drifting header aurora shared by the chat list and chat headers: three
@@ -29,6 +32,62 @@ public final class AuroraLights {
     };
     private final long startTime = SystemClock.elapsedRealtime();
 
+    // Aurora Flow: the lights can take a chat's colours (1.3s ease), e.g. the one you just tapped.
+    private static final long COLORS_MS = 1300;
+    private static final int[] DEFAULT_COLORS = {AuroraTheme.VIOLET, AuroraTheme.BLUE, AuroraTheme.TEAL};
+    private int[] fromColors;
+    private int[] toColors = DEFAULT_COLORS;
+    private int fromBase;
+    private int toBase = AuroraTheme.HEADER_BASE;
+    private long colorsStart;
+
+    /**
+     * Gives the lights {@code colors} (three: violet, blue and teal slots), or
+     * the theme's own with null; the base takes the first colour, darkened.
+     */
+    public void setColors(int[] colors, boolean animated) {
+        int[] target = colors != null && colors.length >= 3 ? colors.clone() : DEFAULT_COLORS;
+        int targetBase = colors != null && colors.length >= 3 ? mix(colors[0], 0xff0b0b10, 0.86f) : AuroraTheme.HEADER_BASE;
+        if (Arrays.equals(target, toColors) && targetBase == toBase) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (animated && AuroraTheme.canAnimate()) {
+            int[] current = new int[3];
+            fromBase = currentColors(now, current);
+            fromColors = current;
+            colorsStart = now;
+        } else {
+            fromColors = null;
+        }
+        toColors = target;
+        toBase = targetBase;
+    }
+
+    /** Fills {@code out} with the lights' colours right now and returns the base colour. */
+    private int currentColors(long now, int[] out) {
+        float t = fromColors == null ? 1f : Math.min(1f, (now - colorsStart) / (float) COLORS_MS);
+        if (t >= 1f) {
+            fromColors = null;
+            System.arraycopy(toColors, 0, out, 0, 3);
+            return toBase;
+        }
+        float e = CubicBezierInterpolator.DEFAULT.getInterpolation(t);
+        for (int i = 0; i < 3; i++) {
+            out[i] = mix(fromColors[i], toColors[i], e);
+        }
+        return mix(fromBase, toBase, e);
+    }
+
+    private final int[] frameColors = new int[3];
+
+    static int mix(int from, int to, float t) {
+        int r = Math.round(((from >> 16) & 0xff) + (((to >> 16) & 0xff) - ((from >> 16) & 0xff)) * t);
+        int g = Math.round(((from >> 8) & 0xff) + (((to >> 8) & 0xff) - ((from >> 8) & 0xff)) * t);
+        int b = Math.round((from & 0xff) + ((to & 0xff) - (from & 0xff)) * t);
+        return 0xff000000 | (r << 16) | (g << 8) | b;
+    }
+
     /**
      * Fills the box with the header base and the lights.
      *
@@ -39,14 +98,17 @@ public final class AuroraLights {
             return false;
         }
         boolean animate = AuroraTheme.canAnimate();
-        long time = animate ? SystemClock.elapsedRealtime() - startTime : 0;
-        basePaint.setColor(withAlpha(AuroraTheme.HEADER_BASE, alpha));
+        long now = SystemClock.elapsedRealtime();
+        long time = animate ? now - startTime : 0;
+        int base = currentColors(now, frameColors);
+        basePaint.setColor(withAlpha(base, alpha));
         canvas.drawRect(left, top, left + width, top + height, basePaint);
         float energy = AuroraEnergy.energy();
         float pointerX = AuroraEnergy.pointerX();
         float pointerY = AuroraEnergy.pointerY();
-        for (Light light : lights) {
-            light.draw(canvas, left, top, width, height, time, alpha, energy, pointerX, pointerY);
+        for (int i = 0; i < lights.length; i++) {
+            lights[i].setColor(frameColors[i]);
+            lights[i].draw(canvas, left, top, width, height, time, alpha, energy, pointerX, pointerY);
         }
         return animate;
     }
@@ -61,6 +123,7 @@ public final class AuroraLights {
         private final Matrix matrix = new Matrix();
         private final float lean;
         private final float opacity;
+        private int color;
         private final float centerX;
         private final float centerY;
         private final float radiusX;
@@ -77,10 +140,18 @@ public final class AuroraLights {
             this.radiusY = radiusY;
             this.period = period;
             this.reverse = reverse;
+            setColor(color);
+        }
+
+        void setColor(int value) {
+            if (paint.getShader() != null && color == value) {
+                return;
+            }
+            color = value;
             // Full strength here; the light's opacity goes on the paint so energy can raise it.
-            int core = withAlpha(color, 255);
-            int mid = withAlpha(color, (int) (255 * 0.45f));
-            int clear = withAlpha(color, 0);
+            int core = withAlpha(value, 255);
+            int mid = withAlpha(value, (int) (255 * 0.45f));
+            int clear = withAlpha(value, 0);
             // A unit circle; the matrix stretches it into the ellipse each frame.
             paint.setShader(new RadialGradient(0, 0, 1, new int[]{core, mid, clear}, new float[]{0f, 0.32f, 0.62f}, Shader.TileMode.CLAMP));
         }

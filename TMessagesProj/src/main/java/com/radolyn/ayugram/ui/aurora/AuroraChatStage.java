@@ -16,6 +16,7 @@ import org.telegram.messenger.ImageReceiver;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * Aurora Flow's chat light: the whole chat screen is one stage lit by three
@@ -108,6 +109,18 @@ public final class AuroraChatStage {
         return AuroraTheme.isActive() && (condition == null || condition.isEnabled());
     }
 
+    /**
+     * The three light colours for a chat: from its avatar photo when it has a
+     * colourful one, otherwise the board's palette for its avatar colour.
+     */
+    public static int[] paletteFor(int colorIndex, boolean saved, Bitmap photo) {
+        if (saved) {
+            return SAVED.clone();
+        }
+        int[] fromPhoto = photo != null ? paletteFromPhoto(photo) : null;
+        return fromPhoto != null ? fromPhoto : PALETTES[Math.abs(colorIndex) % PALETTES.length].clone();
+    }
+
     /** The palette for a chat or person without a photo: their avatar colour index, or Saved Messages. */
     public void setColorIndex(int index, boolean saved) {
         int[] colors = saved ? SAVED : PALETTES[Math.abs(index) % PALETTES.length];
@@ -139,7 +152,7 @@ public final class AuroraChatStage {
     }
 
     private void setPalette(int[] colors, boolean animated) {
-        if (palette != null && java.util.Arrays.equals(palette, colors)) {
+        if (palette != null && Arrays.equals(palette, colors)) {
             return;
         }
         long now = SystemClock.elapsedRealtime();

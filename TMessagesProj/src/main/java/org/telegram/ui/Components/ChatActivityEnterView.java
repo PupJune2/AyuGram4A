@@ -1036,6 +1036,8 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
 
             animateToAmplitude = (float) (Math.min(WaveDrawable.MAX_AMPLITUDE, value) / WaveDrawable.MAX_AMPLITUDE);
             animateAmplitudeDiff = (animateToAmplitude - amplitude) / (100 + 500.0f * WaveDrawable.animationSpeedCircle);
+            // Aurora Flow: while you record, the chat's light breathes with your voice.
+            AuroraEnergy.raiseTo(0.3f + 0.65f * animateToAmplitude);
 
             invalidate();
         }
@@ -2038,7 +2040,7 @@ public class ChatActivityEnterView extends BlurredFrameLayout implements Notific
             attachButton = new ImageView(context);
             attachButton.setScaleType(ImageView.ScaleType.CENTER);
             attachButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_messagePanelIcons), PorterDuff.Mode.MULTIPLY));
-            attachButton.setImageResource(R.drawable.input_attach);
+            attachButton.setImageResource(AuroraTheme.isActive() ? R.drawable.aurora_ic_attach : R.drawable.input_attach);
             attachButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector)));
             attachLayout.addView(attachButton, LayoutHelper.createLinear(48, 48));
             attachButton.setOnClickListener(v -> {

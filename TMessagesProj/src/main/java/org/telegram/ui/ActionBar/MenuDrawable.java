@@ -17,6 +17,8 @@ import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import android.view.animation.DecelerateInterpolator;
 
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.ui.Components.MediaActionDrawable;
 
@@ -142,6 +144,14 @@ public class MenuDrawable extends Drawable {
         }
         lastFrameTime = newTime;
 
+        // Aurora Flow: the design's outline menu icon, round 1.75 strokes with a shorter last line.
+        final boolean aurora = !miniIcon && !rotateToBack && AuroraTheme.isActive();
+        if (aurora != auroraStyle) {
+            auroraStyle = aurora;
+            paint.setStrokeWidth(AndroidUtilities.dp(aurora ? 1.75f : 2));
+            paint.setStrokeCap(aurora || roundCap ? Paint.Cap.ROUND : Paint.Cap.BUTT);
+        }
+
         canvas.save();
 
         canvas.translate(getIntrinsicWidth() / 2 - AndroidUtilities.dp(9) - AndroidUtilities.dp(1) * currentRotation, getIntrinsicHeight() / 2);
@@ -212,7 +222,8 @@ public class MenuDrawable extends Drawable {
             canvas.drawLine(startXDiff, startYDiff, endXDiff, endYDiff, paint);
         } else {
             canvas.drawLine(startXDiff, -startYDiff, endXDiff - diffUp, -endYDiff, paint);
-            canvas.drawLine(startXDiff, startYDiff, endXDiff, endYDiff, paint);
+            float shorter = aurora ? AndroidUtilities.dp(6.75f) * (1f - Math.abs(currentRotation)) : 0;
+            canvas.drawLine(startXDiff, startYDiff, endXDiff - shorter, endYDiff, paint);
         }
         if (type != TYPE_DEFAULT && currentRotation != 1.0f || previousType != TYPE_DEFAULT && typeAnimationProgress != 1.0f) {
             float cx = AndroidUtilities.dp(9 + 8);
@@ -318,6 +329,8 @@ public class MenuDrawable extends Drawable {
     public void setBackColor(int backColor) {
         this.backColor = backColor;
     }
+
+    private boolean auroraStyle;
 
     public void setRoundCap() {
         paint.setStrokeCap(Paint.Cap.ROUND);

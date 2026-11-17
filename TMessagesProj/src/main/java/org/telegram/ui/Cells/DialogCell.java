@@ -51,6 +51,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.radolyn.ayugram.AyuFilter;
 import com.radolyn.ayugram.AyuUtils;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ChatObject;
@@ -3432,7 +3433,15 @@ public class DialogCell extends BaseCell {
                 if (typingLayout != null && updateHelper.typingProgres > 0) {
                     int oldAlpha = typingLayout.getPaint().getAlpha();
                     typingLayout.getPaint().setAlpha((int) (oldAlpha * updateHelper.typingProgres));
+                    // Aurora Flow: "typing…" carries a slow light sweeping across it.
+                    boolean shimmer = AuroraTheme.isActive() && typingLayout.getLineCount() > 0;
+                    if (shimmer) {
+                        AuroraTheme.setTypingShimmer(typingLayout.getPaint(), typingLayout.getLineLeft(0), typingLayout.getLineWidth(0));
+                    }
                     typingLayout.draw(canvas);
+                    if (shimmer) {
+                        typingLayout.getPaint().setShader(null);
+                    }
                     typingLayout.getPaint().setAlpha(oldAlpha);
                 }
                 canvas.restore();

@@ -3384,7 +3384,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
         if (chatMode == 0 && (threadMessageId == 0 || isTopic) && !UserObject.isReplyUser(currentUser) && reportType < 0) {
             TLRPC.UserFull userFull = null;
             if (currentUser != null) {
-                audioCallIconItem = menu.lazilyAddItem(call, R.drawable.ic_call, themeDelegate);
+                audioCallIconItem = menu.lazilyAddItem(call, AuroraTheme.isActive() ? R.drawable.aurora_ic_call : R.drawable.ic_call, themeDelegate);
                 audioCallIconItem.setContentDescription(LocaleController.getString("Call", R.string.Call));
                 userFull = getMessagesController().getUserFull(currentUser.id);
                 if (userFull != null && userFull.phone_calls_available) {
@@ -3410,7 +3410,7 @@ public class ChatActivity extends BaseFragment implements NotificationCenter.Not
             if (currentUser != null) {
                 userFull = getMessagesController().getUserFull(currentUser.id);
             }
-            headerItem = menu.addItem(chat_menu_options, R.drawable.ic_ab_other, themeDelegate);
+            headerItem = menu.addItem(chat_menu_options, AuroraTheme.isActive() ? R.drawable.aurora_ic_more : R.drawable.ic_ab_other, themeDelegate);
             headerItem.setContentDescription(LocaleController.getString("AccDescrMoreOptions", R.string.AccDescrMoreOptions));
 
             if (currentUser == null || !currentUser.self) {

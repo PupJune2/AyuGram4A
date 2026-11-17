@@ -9,12 +9,14 @@ import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.StateSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -90,6 +92,32 @@ public final class AuroraTheme {
      * Ambient motion (the drifting header light) follows the power-saving
      * "animated backgrounds" switch and the system animator scale.
      */
+    private static final long SHIMMER_MS = 1800;
+    private static LinearGradient shimmerShader;
+    private static final Matrix shimmerMatrix = new Matrix();
+
+    /**
+     * Gives {@code paint} the design's "typing…" shimmer for text starting at
+     * {@code left} and {@code width} wide: grey #8B8B96 with a pale lavender
+     * #E9E3FF band sweeping left to right every 1.8s (background-size 200%,
+     * position 180% to -80%). Clear it with {@code setShader(null)} after drawing;
+     * the caller keeps redrawing while someone types.
+     */
+    public static void setTypingShimmer(Paint paint, float left, float width) {
+        if (shimmerShader == null) {
+            shimmerShader = new LinearGradient(0, 0, 1, 0,
+                    new int[]{0xff8b8b96, 0xffe9e3ff, 0xff8b8b96},
+                    new float[]{0f, 0.4f, 0.8f}, Shader.TileMode.CLAMP);
+        }
+        float w = Math.max(1f, width);
+        float t = canAnimate() ? (SystemClock.elapsedRealtime() % SHIMMER_MS) / (float) SHIMMER_MS : 0.5f;
+        float offset = -w * (1.8f - 2.6f * t);
+        shimmerMatrix.setScale(2f * w, 1f);
+        shimmerMatrix.postTranslate(left + offset, 0);
+        shimmerShader.setLocalMatrix(shimmerMatrix);
+        paint.setShader(shimmerShader);
+    }
+
     public static boolean canAnimate() {
         if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_BACKGROUND)) {
             return false;

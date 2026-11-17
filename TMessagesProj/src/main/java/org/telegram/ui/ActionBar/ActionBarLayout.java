@@ -64,6 +64,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.exteragram.messenger.ExteraConfig;
+import com.radolyn.ayugram.ui.aurora.AuroraTheme;
 
 public class ActionBarLayout extends FrameLayout implements INavigationLayout, FloatingDebugProvider {
 
@@ -956,6 +957,12 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             animationRunnable = null;
         }
         setAlpha(1.0f);
+        if (auroraScreenTransition) {
+            // Both screens slid in an Aurora transition; put them back in place.
+            auroraScreenTransition = false;
+            containerView.setTranslationX(0);
+            containerViewBack.setTranslationX(0);
+        }
         containerView.setAlpha(1.0f);
         containerView.setScaleX(1.0f);
         containerView.setScaleY(1.0f);
@@ -1035,6 +1042,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         containerViewBack.setVisibility(View.INVISIBLE);
     }
 
+    private static final float AURORA_SCREEN_MS = 420f;
+    private boolean auroraScreenTransition;
+
     private void startLayoutAnimation(final boolean open, final boolean first, final boolean preview) {
         if (first) {
             animationProgress = 0.0f;
@@ -1058,7 +1068,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                     dt = 18;
                 }
                 lastFrameTime = newTime;
-                float duration = preview && open ? 190.0f : 150.0f;
+                // Aurora Flow: screens slide 28% with a soft ease and fade, the one behind gliding the other way.
+                final boolean aurora = !preview && AuroraTheme.isActive() && AuroraTheme.canAnimate();
+                float duration = aurora ? AURORA_SCREEN_MS : preview && open ? 190.0f : 150.0f;
                 animationProgress += dt / duration;
                 if (animationProgress > 1.0f) {
                     animationProgress = 1.0f;
@@ -1085,7 +1097,21 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                 } else {
                     interpolated = decelerateInterpolator.getInterpolation(animationProgress);
                 }
-                if (open) {
+                if (aurora) {
+                    auroraScreenTransition = true;
+                    float slide = AuroraTheme.RISE.getInterpolation(animationProgress);
+                    float fade = CubicBezierInterpolator.DEFAULT.getInterpolation(Math.min(1f, animationProgress / 0.6f));
+                    float shift = getMeasuredWidth() * 0.28f;
+                    if (open) {
+                        containerView.setAlpha(fade);
+                        containerView.setTranslationX(shift * (1f - slide));
+                        containerViewBack.setTranslationX(-shift * slide);
+                    } else {
+                        containerViewBack.setAlpha(1f - fade);
+                        containerViewBack.setTranslationX(shift * slide);
+                        containerView.setTranslationX(-shift * (1f - slide));
+                    }
+                } else if (open) {
                     float clampedInterpolated = MathUtils.clamp(interpolated, 0, 1);
                     containerView.setAlpha(clampedInterpolated);
                     if (preview) {

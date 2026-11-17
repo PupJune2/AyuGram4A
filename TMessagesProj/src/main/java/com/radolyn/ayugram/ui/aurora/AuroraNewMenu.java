@@ -67,9 +67,9 @@ public class AuroraNewMenu extends FrameLayout {
 
         // Top to bottom; the last one sits closest to the button and appears first.
         items = new View[]{
-                createItem(context, LocaleController.getString("NewChannel", R.string.NewChannel), R.drawable.msg_channel, 0xff0f766e, delegate::onNewChannel),
-                createItem(context, LocaleController.getString("NewGroup", R.string.NewGroup), R.drawable.msg_groups, 0xff2563eb, delegate::onNewGroup),
-                createItem(context, LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle), R.drawable.msg_message, 0xff7c3aed, delegate::onNewMessage),
+                createItem(context, LocaleController.getString("NewChannel", R.string.NewChannel), R.drawable.aurora_ic_megaphone, 0xff0f766e, delegate::onNewChannel),
+                createItem(context, LocaleController.getString("NewGroup", R.string.NewGroup), R.drawable.aurora_ic_users, 0xff2563eb, delegate::onNewGroup),
+                createItem(context, LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle), R.drawable.aurora_ic_message, 0xff7c3aed, delegate::onNewMessage),
         };
         for (int i = 0; i < items.length; i++) {
             column.addView(items[i], LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 52, 0, i == 0 ? 0 : 10, 0, 0));
@@ -92,7 +92,9 @@ public class AuroraNewMenu extends FrameLayout {
         pill.setBackground(new RippleDrawable(new ColorStateList(new int[][]{StateSet.WILD_CARD}, new int[]{0x1fffffff}), fill, mask));
 
         ImageView icon = new ImageView(context);
-        icon.setScaleType(ImageView.ScaleType.CENTER);
+        // The design's 18dp outline icons in a 38dp circle.
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        icon.setPadding(AndroidUtilities.dp(10), AndroidUtilities.dp(10), AndroidUtilities.dp(10), AndroidUtilities.dp(10));
         icon.setImageResource(iconRes);
         icon.setColorFilter(new PorterDuffColorFilter(0xffffffff, PorterDuff.Mode.SRC_IN));
         GradientDrawable circle = new GradientDrawable();

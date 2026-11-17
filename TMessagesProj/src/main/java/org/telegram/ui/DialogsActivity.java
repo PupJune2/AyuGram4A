@@ -3293,6 +3293,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             };
             viewPage.listView.setVerticalScrollBarEnabled(true);
             viewPage.listView.setInstantClick(true);
+            if (AuroraTheme.isActive()) {
+                // Aurora Flow: a pressed chat lights up as a rounded card (20dp) set in from the edges.
+                viewPage.listView.setSelectorRadius(AndroidUtilities.dp(20));
+                viewPage.listView.setSelectorInsets(AndroidUtilities.dp(8), AndroidUtilities.dp(2));
+                viewPage.listView.setSelectorDrawableColor(Theme.getColor(Theme.key_listSelector));
+            }
             viewPage.layoutManager = new LinearLayoutManager(context) {
 
                 @Override
@@ -4008,6 +4014,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (initialDialogsType == DIALOGS_TYPE_WIDGET) {
             floatingButton.setImageResource(R.drawable.floating_check);
             floatingButtonContainer.setContentDescription(LocaleController.getString("Done", R.string.Done));
+        } else if (AuroraTheme.isActive()) {
+            // Aurora Flow: the outline pen from the design's icon set.
+            floatingButton.setImageResource(R.drawable.aurora_ic_pen);
+            floatingButtonContainer.setContentDescription(LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle));
         } else {
             floatingButton.setAnimation(R.raw.write_contacts_fab_icon, 52, 52);
             floatingButtonContainer.setContentDescription(LocaleController.getString("NewMessageTitle", R.string.NewMessageTitle));
@@ -4056,7 +4066,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0) {
             auroraCloseIcon = new ImageView(context);
             auroraCloseIcon.setScaleType(ImageView.ScaleType.CENTER);
-            auroraCloseIcon.setImageResource(R.drawable.msg_close);
+            auroraCloseIcon.setImageResource(R.drawable.aurora_ic_close);
             auroraCloseIcon.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chats_actionIcon), PorterDuff.Mode.SRC_IN));
             auroraCloseIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             auroraCloseIcon.setAlpha(0f);
